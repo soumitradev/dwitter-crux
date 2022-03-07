@@ -2,6 +2,12 @@
 
 I'm trying to make a Twitter clone using Go, GraphQL, and Prisma with a Postgresql backend.
 
+This fork uses session authentication, and stores sessions in Redis.
+
+The redis session store has been configured according to [https://redis.io/topics/quickstart](https://redis.io/topics/quickstart), but at port 6420. The config and start script files are in the root of this repo.
+
+I plan to use port 6421 for the redis LRU cache.
+
 I use `make` to make my workflow easier (no pun intended), the commands are:
 
 `make run` : Run only the API. Don't migrate databases.
