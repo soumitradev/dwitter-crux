@@ -16,7 +16,7 @@ The prisma schema is [here](./prisma/schema.prisma)
 
 **NOTE:** You need `ffmpeg` added to your path to run this. It uses ffmpeg to generate thumbnails for videos uploaded.
 
-> .env contains ACCESS_SECRET, REFRESH_SECRET, DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET
+> .env contains ACCESS_SECRET, REFRESH_SECRET, DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, SENDGRID_API_KEY, and SENDGRID_SENDER_EMAIL_ADDR
 
 > cdn_key.json is the key to Google Firebase
 
