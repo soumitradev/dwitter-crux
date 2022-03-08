@@ -77,7 +77,7 @@ func SignUpUser(username string, password string, name string, bio string, email
 			db.User.Bio.Set(bio),
 			db.User.ProfilePicURL.Set(common.DefaultPFPURL),
 			db.User.TokenVersion.Set(rand.Intn(10000)),
-			db.User.CreatedAt.Set(time.Now()),
+			db.User.CreatedAt.Set(time.Now().UTC()),
 			db.User.OAuthProvider.Set("None"),
 			db.User.Verified.Set(false),
 		).With(
@@ -138,7 +138,7 @@ func NewDweet(body, username string, mediaLinks []string) (schema.DweetType, err
 		).Exec(common.BaseCtx)
 	}
 
-	now := time.Now()
+	now := time.Now().UTC()
 	createdPost, err := common.Client.Dweet.CreateOne(
 		db.Dweet.DweetBody.Set(body),
 		db.Dweet.ID.Set(randID),
@@ -216,7 +216,7 @@ func NewReply(originalPostID string, body string, authorUsername string, mediaLi
 		).Exec(common.BaseCtx)
 	}
 
-	now := time.Now()
+	now := time.Now().UTC()
 	// Create a Reply
 	createdReply, err := common.Client.Dweet.CreateOne(
 		db.Dweet.DweetBody.Set(body),
@@ -316,7 +316,7 @@ func Redweet(originalPostID, username string) (schema.RedweetType, error) {
 		db.Redweet.RedweetOf.Link(
 			db.Dweet.ID.Equals(originalPostID),
 		),
-		db.Redweet.RedweetTime.Set(time.Now()),
+		db.Redweet.RedweetTime.Set(time.Now().UTC()),
 	).With(
 		db.Redweet.Author.Fetch(),
 		db.Redweet.RedweetOf.Fetch().With(

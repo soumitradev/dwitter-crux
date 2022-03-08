@@ -8,15 +8,19 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/soumitradev/Dwitter/backend/common"
 	"github.com/soumitradev/Dwitter/backend/prisma/db"
 	"github.com/soumitradev/Dwitter/backend/util"
 
 	"github.com/golang/gddo/httputil/header"
 )
+
+var authDB *redis.Client
 
 // A SessionType stores info for a session
 type SessionType struct {
@@ -25,17 +29,21 @@ type SessionType struct {
 	Expires  time.Time `json:"expires"`
 }
 
-var Sessions map[string]SessionType
-
 // A loginType stores login info
 type loginType struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
 }
 
+var timeUTCFormat string = "Mon, 2 Jan 2006 15:04:05 MST"
+
 // TODO: Move to redis
-func init() {
-	Sessions = make(map[string]SessionType)
+func InitAuth() {
+	authDB = redis.NewClient(&redis.Options{
+		Addr:     "localhost:6420",
+		Password: os.Getenv("REDIS_6420_PASS"),
+		DB:       0,
+	})
 }
 
 // Extract session from cookie
@@ -64,17 +72,35 @@ func generateSession(username string, password string) (SessionType, error) {
 	authenticated, err := common.CheckCreds(username, password)
 	if authenticated {
 		sid := util.GenID(20)
-		_, found := Sessions[sid]
-		for found {
+		_, err := authDB.Get(common.BaseCtx, sid).Result()
+		for err == nil {
 			sid = util.GenID(20)
-			_, found = Sessions[sid]
+			_, err = authDB.Get(common.BaseCtx, sid).Result()
+		}
+		if err != redis.Nil {
+			return SessionType{}, err
 		}
 		session := SessionType{
 			Username: username,
 			Sid:      sid,
-			Expires:  time.Now().Add(time.Hour * 24),
+			Expires:  time.Now().UTC().Add(time.Hour * 24),
 		}
-		Sessions[sid] = session
+
+		// Convert struct into a hashmap
+		sessionMap := make(map[string]string)
+		sessionMap["username"] = session.Username
+		sessionMap["sid"] = session.Sid
+		sessionMap["expires"] = session.Expires.UTC().Format(timeUTCFormat)
+
+		err = authDB.HSet(common.BaseCtx, sid, sessionMap).Err()
+		if err != nil {
+			return SessionType{}, err
+		}
+		err = authDB.ExpireAt(common.BaseCtx, sid, session.Expires).Err()
+		if err != nil {
+			return SessionType{}, err
+		}
+
 		return session, nil
 	} else {
 		return SessionType{}, err
@@ -88,7 +114,15 @@ func VerifySessionID(sessionID string) (SessionType, bool, error) {
 	}
 
 	// Validate session
-	if session, found := Sessions[sessionID]; found {
+	res, err := authDB.HGetAll(common.BaseCtx, sessionID).Result()
+	if err == nil {
+		var session SessionType
+		session.Username = res["username"]
+		session.Sid = res["sid"]
+		session.Expires, err = time.Parse(timeUTCFormat, res["expires"])
+		if err != nil {
+			return SessionType{}, false, err
+		}
 		_, err := common.Client.User.FindUnique(
 			db.User.Username.Equals(session.Username),
 		).Exec(common.BaseCtx)

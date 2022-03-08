@@ -163,7 +163,7 @@ func OAuth2callbackHandler(w http.ResponseWriter, r *http.Request) {
 					db.User.Bio.Set(""),
 					db.User.ProfilePicURL.Set("https://cdn.discordapp.com/avatars/"+userData.ID+"/"+userData.AvatarHash+".png"),
 					db.User.TokenVersion.Set(rand.Intn(10000)),
-					db.User.CreatedAt.Set(time.Now()),
+					db.User.CreatedAt.Set(time.Now().UTC()),
 					db.User.OAuthProvider.Set("Discord"),
 				).With(
 					db.User.Dweets.Fetch().With(

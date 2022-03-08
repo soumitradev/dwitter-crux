@@ -38,6 +38,9 @@ func main() {
 	// Initialize sendgrid
 	common.InitSendgrid()
 
+	// Initialize redis auth db
+	auth.InitAuth()
+
 	// Check for an error in schema at runtime
 	if gql.SchemaError != nil {
 		panic(gql.SchemaError)

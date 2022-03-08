@@ -94,7 +94,7 @@ func UpdateDweet(postID string, username string, body string, mediaLinks []strin
 		).Update(
 			db.Dweet.DweetBody.Set(body),
 			db.Dweet.Media.Set(mediaLinks),
-			db.Dweet.LastUpdatedAt.Set(time.Now()),
+			db.Dweet.LastUpdatedAt.Set(time.Now().UTC()),
 		).Exec(common.BaseCtx)
 	} else {
 		post, err = common.Client.Dweet.FindUnique(
@@ -118,7 +118,7 @@ func UpdateDweet(postID string, username string, body string, mediaLinks []strin
 		).Update(
 			db.Dweet.DweetBody.Set(body),
 			db.Dweet.Media.Set(mediaLinks),
-			db.Dweet.LastUpdatedAt.Set(time.Now()),
+			db.Dweet.LastUpdatedAt.Set(time.Now().UTC()),
 		).Exec(common.BaseCtx)
 	}
 	if err == db.ErrNotFound {
