@@ -17,14 +17,14 @@ func init() {
 		// Wire up the GraphqL WebSocket handler with the subscription manager
 		SubscriptionManager: common.SubscriptionManager,
 
-		// Optional: Add a hook to resolve auth tokens into users that are
+		// Optional: Add a hook to resolve auth cookies into users that are
 		// then stored on the GraphQL WS connections
-		Authenticate: func(authToken string) (interface{}, error) {
-			data, _, err := auth.VerifyAccessToken(authToken)
+		Authenticate: func(authCookie string) (interface{}, error) {
+			data, _, err := auth.VerifySessionID(authCookie)
 			if err != nil {
 				return nil, err
 			}
-			return data["username"].(string), nil
+			return data.Username, nil
 		},
 	})
 

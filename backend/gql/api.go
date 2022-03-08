@@ -33,8 +33,8 @@ var queryHandler = graphql.NewObject(
 					},
 				},
 				Resolve: func(params graphql.ResolveParams) (interface{}, error) {
-					tokenString := params.Info.RootValue.(map[string]interface{})["token"].(string)
-					data, isAuth, err := auth.VerifyAccessToken(tokenString)
+					cookieString := params.Info.RootValue.(map[string]interface{})["sid"].(string)
+					data, isAuth, err := auth.VerifySessionID(cookieString)
 					if err != nil {
 						return nil, err
 					}
@@ -44,7 +44,7 @@ var queryHandler = graphql.NewObject(
 						numReplies, numPresent := params.Args["repliesToFetch"].(int)
 						replyOffset, offsetPresent := params.Args["repliesOffset"].(int)
 						if idPresent && numPresent && offsetPresent {
-							post, err := database.GetPost(id, numReplies, replyOffset, data["username"].(string))
+							post, err := database.GetPost(id, numReplies, replyOffset, data.Username)
 							return post, err
 						}
 					} else {
@@ -86,8 +86,8 @@ var queryHandler = graphql.NewObject(
 					},
 				},
 				Resolve: func(params graphql.ResolveParams) (interface{}, error) {
-					tokenString := params.Info.RootValue.(map[string]interface{})["token"].(string)
-					data, isAuth, err := auth.VerifyAccessToken(tokenString)
+					cookieString := params.Info.RootValue.(map[string]interface{})["sid"].(string)
+					data, isAuth, err := auth.VerifySessionID(cookieString)
 					if err != nil {
 						return nil, err
 					}
@@ -99,7 +99,7 @@ var queryHandler = graphql.NewObject(
 						numReplies, numRepliesPresent := params.Args["repliesToFetch"].(int)
 						replyOffset, replyOffsetPresent := params.Args["repliesOffset"].(int)
 						if txtPresent && numPresent && numOffsetPresent && numRepliesPresent && replyOffsetPresent {
-							posts, err := database.SearchPosts(txt, num, numOffset, numReplies, replyOffset, data["username"].(string))
+							posts, err := database.SearchPosts(txt, num, numOffset, numReplies, replyOffset, data.Username)
 							return posts, err
 						}
 					} else {
@@ -138,8 +138,8 @@ var queryHandler = graphql.NewObject(
 					},
 				},
 				Resolve: func(params graphql.ResolveParams) (interface{}, error) {
-					tokenString := params.Info.RootValue.(map[string]interface{})["token"].(string)
-					data, isAuth, err := auth.VerifyAccessToken(tokenString)
+					cookieString := params.Info.RootValue.(map[string]interface{})["sid"].(string)
+					data, isAuth, err := auth.VerifySessionID(cookieString)
 					if err != nil {
 						return nil, err
 					}
@@ -150,7 +150,7 @@ var queryHandler = graphql.NewObject(
 						numFeedObjects, numPresent := params.Args["feedObjectsToFetch"].(int)
 						feedObjectsOffset, feedObjectsOffsetPresent := params.Args["feedObjectsOffset"].(int)
 						if userPresent && objectsToFetchPresent && numPresent && feedObjectsOffsetPresent {
-							user, err := database.GetUser(username, objectsToFetch, numFeedObjects, feedObjectsOffset, data["username"].(string))
+							user, err := database.GetUser(username, objectsToFetch, numFeedObjects, feedObjectsOffset, data.Username)
 							return user, err
 						}
 					} else {
@@ -197,8 +197,8 @@ var queryHandler = graphql.NewObject(
 					},
 				},
 				Resolve: func(params graphql.ResolveParams) (interface{}, error) {
-					tokenString := params.Info.RootValue.(map[string]interface{})["token"].(string)
-					data, isAuth, err := auth.VerifyAccessToken(tokenString)
+					cookieString := params.Info.RootValue.(map[string]interface{})["sid"].(string)
+					data, isAuth, err := auth.VerifySessionID(cookieString)
 					if err != nil {
 						return nil, err
 					}
@@ -211,7 +211,7 @@ var queryHandler = graphql.NewObject(
 						numFeedObjects, numFeedObjectsPresent := params.Args["feedObjectsToFetch"].(int)
 						feedObjectsOffset, feedObjectsOffsetPresent := params.Args["feedObjectsOffset"].(int)
 						if txtPresent && numPresent && numOffsetPresent && objectsToFetchPresent && numFeedObjectsPresent && feedObjectsOffsetPresent {
-							posts, err := database.SearchUsers(txt, num, numOffset, objectsToFetch, numFeedObjects, feedObjectsOffset, data["username"].(string))
+							posts, err := database.SearchUsers(txt, num, numOffset, objectsToFetch, numFeedObjects, feedObjectsOffset, data.Username)
 							return posts, err
 						}
 					} else {
@@ -252,8 +252,8 @@ var queryHandler = graphql.NewObject(
 					},
 				},
 				Resolve: func(params graphql.ResolveParams) (interface{}, error) {
-					tokenString := params.Info.RootValue.(map[string]interface{})["token"].(string)
-					data, isAuth, err := auth.VerifyAccessToken(tokenString)
+					cookieString := params.Info.RootValue.(map[string]interface{})["sid"].(string)
+					data, isAuth, err := auth.VerifySessionID(cookieString)
 					if err != nil {
 						return nil, err
 					}
@@ -264,7 +264,7 @@ var queryHandler = graphql.NewObject(
 						numReplies, repliesPresent := params.Args["repliesToFetch"].(int)
 						replyOffset, replyOffsetPresent := params.Args["repliesOffset"].(int)
 						if dweetPresent && repliesPresent && numOffsetPresent && replyOffsetPresent {
-							post, err := database.GetLikedDweets(data["username"].(string), numDweets, numOffset, numReplies, replyOffset)
+							post, err := database.GetLikedDweets(data.Username, numDweets, numOffset, numReplies, replyOffset)
 							return post, err
 						}
 					}
@@ -298,8 +298,8 @@ var queryHandler = graphql.NewObject(
 					},
 				},
 				Resolve: func(params graphql.ResolveParams) (interface{}, error) {
-					tokenString := params.Info.RootValue.(map[string]interface{})["token"].(string)
-					data, isAuth, err := auth.VerifyAccessToken(tokenString)
+					cookieString := params.Info.RootValue.(map[string]interface{})["sid"].(string)
+					data, isAuth, err := auth.VerifySessionID(cookieString)
 					if err != nil {
 						return nil, err
 					}
@@ -311,7 +311,7 @@ var queryHandler = graphql.NewObject(
 						numFeedObjects, numFeedObjectsPresent := params.Args["feedObjectsToFetch"].(int)
 						feedObjectsOffset, feedObjectsOffsetPresent := params.Args["feedObjectsOffset"].(int)
 						if usersPresent && usersOffsetPresent && objectsToFetchPresent && numFeedObjectsPresent && feedObjectsOffsetPresent {
-							post, err := database.GetFollowers(data["username"].(string), numUsers, numOffset, objectsToFetch, numFeedObjects, feedObjectsOffset)
+							post, err := database.GetFollowers(data.Username, numUsers, numOffset, objectsToFetch, numFeedObjects, feedObjectsOffset)
 							return post, err
 						}
 					}
@@ -345,8 +345,8 @@ var queryHandler = graphql.NewObject(
 					},
 				},
 				Resolve: func(params graphql.ResolveParams) (interface{}, error) {
-					tokenString := params.Info.RootValue.(map[string]interface{})["token"].(string)
-					data, isAuth, err := auth.VerifyAccessToken(tokenString)
+					cookieString := params.Info.RootValue.(map[string]interface{})["sid"].(string)
+					data, isAuth, err := auth.VerifySessionID(cookieString)
 					if err != nil {
 						return nil, err
 					}
@@ -357,7 +357,7 @@ var queryHandler = graphql.NewObject(
 						numFeedObjects, numFeedObjectsPresent := params.Args["feedObjectsToFetch"].(int)
 						feedObjectsOffset, feedObjectsOffsetPresent := params.Args["feedObjectsOffset"].(int)
 						if usersPresent && usersOffsetPresent && objectsToFetchPresent && numFeedObjectsPresent && feedObjectsOffsetPresent {
-							post, err := database.GetFollowing(data["username"].(string), numUsers, numOffset, objectsToFetch, numFeedObjects, feedObjectsOffset)
+							post, err := database.GetFollowing(data.Username, numUsers, numOffset, objectsToFetch, numFeedObjects, feedObjectsOffset)
 							return post, err
 						}
 					}
@@ -422,8 +422,8 @@ var mutationHandler = graphql.NewObject(
 				},
 				Resolve: func(params graphql.ResolveParams) (interface{}, error) {
 					// Check authentication
-					tokenString := params.Info.RootValue.(map[string]interface{})["token"].(string)
-					data, isAuth, err := auth.VerifyAccessToken(tokenString)
+					cookieString := params.Info.RootValue.(map[string]interface{})["sid"].(string)
+					data, isAuth, err := auth.VerifySessionID(cookieString)
 					if err != nil {
 						return nil, err
 					}
@@ -437,7 +437,7 @@ var mutationHandler = graphql.NewObject(
 							for _, link := range media {
 								mediaList = append(mediaList, link.(string))
 							}
-							dweet, err := database.NewDweet(body, data["username"].(string), mediaList)
+							dweet, err := database.NewDweet(body, data.Username, mediaList)
 							return dweet, err
 						}
 						return nil, errors.New("invalid request: missing argument")
@@ -463,8 +463,8 @@ var mutationHandler = graphql.NewObject(
 				},
 				Resolve: func(params graphql.ResolveParams) (interface{}, error) {
 					// Check authentication
-					tokenString := params.Info.RootValue.(map[string]interface{})["token"].(string)
-					data, isAuth, err := auth.VerifyAccessToken(tokenString)
+					cookieString := params.Info.RootValue.(map[string]interface{})["sid"].(string)
+					data, isAuth, err := auth.VerifySessionID(cookieString)
 					if err != nil {
 						return nil, err
 					}
@@ -479,7 +479,7 @@ var mutationHandler = graphql.NewObject(
 							for _, link := range media {
 								mediaList = append(mediaList, link.(string))
 							}
-							dweet, err := database.NewReply(originalID, body, data["username"].(string), mediaList)
+							dweet, err := database.NewReply(originalID, body, data.Username, mediaList)
 							return dweet, err
 						}
 						return nil, errors.New("invalid request: missing argument")
@@ -498,8 +498,8 @@ var mutationHandler = graphql.NewObject(
 				},
 				Resolve: func(params graphql.ResolveParams) (interface{}, error) {
 					// Check authentication
-					tokenString := params.Info.RootValue.(map[string]interface{})["token"].(string)
-					data, isAuth, err := auth.VerifyAccessToken(tokenString)
+					cookieString := params.Info.RootValue.(map[string]interface{})["sid"].(string)
+					data, isAuth, err := auth.VerifySessionID(cookieString)
 					if err != nil {
 						return nil, err
 					}
@@ -508,7 +508,7 @@ var mutationHandler = graphql.NewObject(
 						// Create a redweet, and return formatted
 						originalID, idPresent := params.Args["id"].(string)
 						if idPresent {
-							redweet, err := database.Redweet(originalID, data["username"].(string))
+							redweet, err := database.Redweet(originalID, data.Username)
 							return redweet, err
 						}
 						return nil, errors.New("invalid request: missing argument")
@@ -539,8 +539,8 @@ var mutationHandler = graphql.NewObject(
 				},
 				Resolve: func(params graphql.ResolveParams) (interface{}, error) {
 					// Check authentication
-					tokenString := params.Info.RootValue.(map[string]interface{})["token"].(string)
-					data, isAuth, err := auth.VerifyAccessToken(tokenString)
+					cookieString := params.Info.RootValue.(map[string]interface{})["sid"].(string)
+					data, isAuth, err := auth.VerifySessionID(cookieString)
 					if err != nil {
 						return nil, err
 					}
@@ -552,12 +552,12 @@ var mutationHandler = graphql.NewObject(
 						numFeedObjects, numFeedObjectsPresent := params.Args["feedObjectsToFetch"].(int)
 						feedObjectsOffset, feedObjectsOffsetPresent := params.Args["feedObjectsOffset"].(int)
 
-						if username == data["username"].(string) {
+						if username == data.Username {
 							return nil, errors.New("can't follow self")
 						}
 
 						if userPresent && objectsToFetchPresent && numFeedObjectsPresent && feedObjectsOffsetPresent {
-							user, err := database.Follow(username, data["username"].(string), objectsToFetch, numFeedObjects, feedObjectsOffset)
+							user, err := database.Follow(username, data.Username, objectsToFetch, numFeedObjects, feedObjectsOffset)
 							return user, err
 						}
 						return nil, errors.New("invalid request: missing argument")
@@ -584,8 +584,8 @@ var mutationHandler = graphql.NewObject(
 				},
 				Resolve: func(params graphql.ResolveParams) (interface{}, error) {
 					// Check authentication
-					tokenString := params.Info.RootValue.(map[string]interface{})["token"].(string)
-					data, isAuth, err := auth.VerifyAccessToken(tokenString)
+					cookieString := params.Info.RootValue.(map[string]interface{})["sid"].(string)
+					data, isAuth, err := auth.VerifySessionID(cookieString)
 					if err != nil {
 						return nil, err
 					}
@@ -596,7 +596,7 @@ var mutationHandler = graphql.NewObject(
 						repliesToFetch, repliesPresent := params.Args["repliesToFetch"].(int)
 						replyOffset, offsetPresent := params.Args["repliesOffset"].(int)
 						if idPresent && repliesPresent && offsetPresent {
-							dweet, err := database.Like(id, data["username"].(string), repliesToFetch, replyOffset)
+							dweet, err := database.Like(id, data.Username, repliesToFetch, replyOffset)
 							return dweet, err
 						}
 						return nil, errors.New("invalid request: missing argument")
@@ -623,8 +623,8 @@ var mutationHandler = graphql.NewObject(
 				},
 				Resolve: func(params graphql.ResolveParams) (interface{}, error) {
 					// Check authentication
-					tokenString := params.Info.RootValue.(map[string]interface{})["token"].(string)
-					data, isAuth, err := auth.VerifyAccessToken(tokenString)
+					cookieString := params.Info.RootValue.(map[string]interface{})["sid"].(string)
+					data, isAuth, err := auth.VerifySessionID(cookieString)
 					if err != nil {
 						return nil, err
 					}
@@ -635,7 +635,7 @@ var mutationHandler = graphql.NewObject(
 						repliesToFetch, repliesPresent := params.Args["repliesToFetch"].(int)
 						replyOffset, offsetPresent := params.Args["repliesOffset"].(int)
 						if idPresent && repliesPresent && offsetPresent {
-							dweet, err := database.Unlike(id, data["username"].(string), repliesToFetch, replyOffset)
+							dweet, err := database.Unlike(id, data.Username, repliesToFetch, replyOffset)
 							return dweet, err
 						}
 						return nil, errors.New("invalid request: missing argument")
@@ -666,8 +666,8 @@ var mutationHandler = graphql.NewObject(
 				},
 				Resolve: func(params graphql.ResolveParams) (interface{}, error) {
 					// Check authentication
-					tokenString := params.Info.RootValue.(map[string]interface{})["token"].(string)
-					data, isAuth, err := auth.VerifyAccessToken(tokenString)
+					cookieString := params.Info.RootValue.(map[string]interface{})["sid"].(string)
+					data, isAuth, err := auth.VerifySessionID(cookieString)
 					if err != nil {
 						return nil, err
 					}
@@ -679,12 +679,12 @@ var mutationHandler = graphql.NewObject(
 						numFeedObjects, numFeedObjectsPresent := params.Args["feedObjectsToFetch"].(int)
 						feedObjectsOffset, feedObjectsOffsetPresent := params.Args["feedObjectsOffset"].(int)
 
-						if username == data["username"].(string) {
+						if username == data.Username {
 							return nil, errors.New("can't unfollow self")
 						}
 
 						if userPresent && objectsToFetchPresent && numFeedObjectsPresent && feedObjectsOffsetPresent {
-							user, err := database.Unfollow(username, data["username"].(string), objectsToFetch, numFeedObjects, feedObjectsOffset)
+							user, err := database.Unfollow(username, data.Username, objectsToFetch, numFeedObjects, feedObjectsOffset)
 							return user, err
 						}
 						return nil, errors.New("invalid request: missing argument")
@@ -718,8 +718,8 @@ var mutationHandler = graphql.NewObject(
 				},
 				Resolve: func(params graphql.ResolveParams) (interface{}, error) {
 					// Check authentication
-					tokenString := params.Info.RootValue.(map[string]interface{})["token"].(string)
-					data, isAuth, err := auth.VerifyAccessToken(tokenString)
+					cookieString := params.Info.RootValue.(map[string]interface{})["sid"].(string)
+					data, isAuth, err := auth.VerifySessionID(cookieString)
 					if err != nil {
 						return nil, err
 					}
@@ -736,7 +736,7 @@ var mutationHandler = graphql.NewObject(
 							for _, link := range media {
 								mediaList = append(mediaList, link.(string))
 							}
-							dweet, err := database.UpdateDweet(id, data["username"].(string), body, mediaList, repliesToFetch, replyOffset)
+							dweet, err := database.UpdateDweet(id, data.Username, body, mediaList, repliesToFetch, replyOffset)
 							return dweet, err
 						}
 						return nil, errors.New("invalid request: missing argument")
@@ -795,8 +795,8 @@ var mutationHandler = graphql.NewObject(
 				},
 				Resolve: func(params graphql.ResolveParams) (interface{}, error) {
 					// Check authentication
-					tokenString := params.Info.RootValue.(map[string]interface{})["token"].(string)
-					data, isAuth, err := auth.VerifyAccessToken(tokenString)
+					cookieString := params.Info.RootValue.(map[string]interface{})["sid"].(string)
+					data, isAuth, err := auth.VerifySessionID(cookieString)
 					if err != nil {
 						return nil, err
 					}
@@ -815,7 +815,7 @@ var mutationHandler = graphql.NewObject(
 						followingToFetch, followingPresent := params.Args["followingToFetch"].(int)
 						followingOffset, followingOffsetPresent := params.Args["followingOffset"].(int)
 						if namePresent && emailPresent && bioPresent && pfpPresent && objectsToFetchPresent && numFeedObjectsPresent && feedObjectsOffsetPresent && followersPresent && followersOffsetPresent && followingPresent && followingOffsetPresent {
-							user, err := database.UpdateUser(data["username"].(string), name, email, bio, PfpUrl, followersToFetch, followersOffset, followingToFetch, followingOffset, objectsToFetch, numFeedObjects, feedObjectsOffset)
+							user, err := database.UpdateUser(data.Username, name, email, bio, PfpUrl, followersToFetch, followersOffset, followingToFetch, followingOffset, objectsToFetch, numFeedObjects, feedObjectsOffset)
 							return user, err
 						}
 						return nil, errors.New("invalid request: missing argument")
@@ -842,8 +842,8 @@ var mutationHandler = graphql.NewObject(
 				},
 				Resolve: func(params graphql.ResolveParams) (interface{}, error) {
 					// Check authentication
-					tokenString := params.Info.RootValue.(map[string]interface{})["token"].(string)
-					data, isAuth, err := auth.VerifyAccessToken(tokenString)
+					cookieString := params.Info.RootValue.(map[string]interface{})["sid"].(string)
+					data, isAuth, err := auth.VerifySessionID(cookieString)
 					if err != nil {
 						return nil, err
 					}
@@ -854,7 +854,7 @@ var mutationHandler = graphql.NewObject(
 						repliesToFetch, repliesPresent := params.Args["repliesToFetch"].(int)
 						replyOffset, offsetPresent := params.Args["repliesOffset"].(int)
 						if idPresent && repliesPresent && offsetPresent {
-							dweet, err := database.DeleteDweet(id, data["username"].(string), repliesToFetch, replyOffset)
+							dweet, err := database.DeleteDweet(id, data.Username, repliesToFetch, replyOffset)
 							return dweet, err
 						}
 						return nil, errors.New("invalid request: missing argument")
@@ -873,8 +873,8 @@ var mutationHandler = graphql.NewObject(
 				},
 				Resolve: func(params graphql.ResolveParams) (interface{}, error) {
 					// Check authentication
-					tokenString := params.Info.RootValue.(map[string]interface{})["token"].(string)
-					data, isAuth, err := auth.VerifyAccessToken(tokenString)
+					cookieString := params.Info.RootValue.(map[string]interface{})["sid"].(string)
+					data, isAuth, err := auth.VerifySessionID(cookieString)
 					if err != nil {
 						return nil, err
 					}
@@ -883,7 +883,7 @@ var mutationHandler = graphql.NewObject(
 						// Make user unredweet the dweet, and return formatted
 						id, present := params.Args["id"].(string)
 						if present {
-							redweet, err := database.DeleteRedweet(id, data["username"].(string))
+							redweet, err := database.DeleteRedweet(id, data.Username)
 							return redweet, err
 						}
 						return nil, errors.New("invalid request: missing argument")
@@ -905,14 +905,14 @@ var subscriptionHandler = graphql.NewObject(
 				Type: graphql.NewList(schema.FeedObjectSchema),
 				Resolve: func(params graphql.ResolveParams) (interface{}, error) {
 					// Check authentication
-					tokenString := params.Info.RootValue.(map[string]interface{})["token"].(string)
-					data, isAuth, err := auth.VerifyAccessToken(tokenString)
+					cookieString := params.Info.RootValue.(map[string]interface{})["sid"].(string)
+					data, isAuth, err := auth.VerifySessionID(cookieString)
 					if err != nil {
 						return nil, err
 					}
 
 					if isAuth {
-						obj, err := database.GetFeed(data["username"].(string))
+						obj, err := database.GetFeed(data.Username)
 						return obj, err
 					}
 

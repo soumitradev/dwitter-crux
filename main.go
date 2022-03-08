@@ -63,10 +63,18 @@ func main() {
 		// This is a way to pass context about the request into the resolver function of graphql
 		RootObjectFn: func(myCtx context.Context, r *http.Request) map[string]interface{} {
 			// Pass down the authorization token to the graphql query
-			authHeader := r.Header.Get("authorization")
-			tokenString := auth.SplitAuthToken(authHeader)
+			cookie, _ := r.Cookie("session")
+			var sid string
+			if cookie != nil {
+				cookieString := cookie.Value
+				session := auth.ParseCookie(cookieString)
+				sid = session.Sid
+			} else {
+				sid = ""
+			}
+
 			return map[string]interface{}{
-				"token": tokenString,
+				"sid": sid,
 			}
 		},
 	})
@@ -76,7 +84,6 @@ func main() {
 
 	// Handle some API endpoints using a non-GraphQL solution
 	router.HandleFunc("/api/login", auth.LoginHandler).Methods("POST")
-	router.HandleFunc("/api/refresh_token", auth.RefreshHandler).Methods("POST")
 	router.HandleFunc("/api/verify/{token}", auth.VerifyHandler).Methods("GET")
 	router.HandleFunc("/api/media_upload", cdn.UploadMediaHandler).Methods("POST")
 	router.HandleFunc("/api/pfp_upload", cdn.UploadPFPHandler).Methods("POST")

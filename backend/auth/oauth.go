@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -182,7 +183,7 @@ func OAuth2callbackHandler(w http.ResponseWriter, r *http.Request) {
 				}
 
 				// After checking for any errors, log the user in, and generate tokens
-				tokenData, err := generateTokens(userData.Username, tokenData.RefreshToken)
+				sessionData, err := generateSession(userData.Username, tokenData.RefreshToken)
 				if err != nil {
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusUnauthorized)
@@ -192,22 +193,33 @@ func OAuth2callbackHandler(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 
+				// Base 64 encode the session data because cookies are fuck
+				jsonSession, err := json.Marshal(&sessionData)
+				base64SessionString := base64.StdEncoding.EncodeToString(jsonSession)
+				if err != nil {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusInternalServerError)
+					json.NewEncoder(w).Encode(common.HTTPError{
+						Error: fmt.Sprintf("internal server error: %v", err),
+					})
+					return
+				}
+
 				// Send the refresh token in a HTTPOnly cookie
 				c := http.Cookie{
-					Name:     "jid",
-					Value:    tokenData.RefreshToken,
+					Name:     "session",
+					Value:    base64SessionString,
 					HttpOnly: true,
 					Secure:   true,
-					Path:     "/api/refresh_token",
+					Path:     "/",
+					Expires:  sessionData.Expires,
 				}
 				http.SetCookie(w, &c)
 
 				// Set the response headers
 				w.Header().Set("Content-Type", "application/json")
 				// Send the access token in JSON
-				json.NewEncoder(w).Encode(loginResponse{
-					AccessToken: tokenData.AccessToken,
-				})
+				json.NewEncoder(w).Encode(sessionData)
 			} else {
 				// TODO: Check if user already exists, and OAuth login them in.
 				w.Header().Set("Content-Type", "application/json")
