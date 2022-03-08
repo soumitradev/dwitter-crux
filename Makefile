@@ -12,6 +12,12 @@ clean:
 	# Create DB for testing
 	-@(sudo -H -u postgres bash -c 'createdb dev')
 
+psql:
+	sudo service postgresql start
+
+redis:
+	sudo /etc/init.d/redis_6420 start
+
 kill:
 	@ps axf | grep "test dev 127.0.0.1" | grep -v grep | awk '{print "sudo kill " $$1}'
 	@ps axf | grep "test dev 127.0.0.1" | grep -v grep | awk '{print "sudo kill " $$1}' | bash
