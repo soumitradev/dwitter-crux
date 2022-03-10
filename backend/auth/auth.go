@@ -95,7 +95,7 @@ func generateSession(username string, password string) (SessionType, error) {
 		if err != nil {
 			return SessionType{}, err
 		}
-		err = authDB.ExpireAt(common.BaseCtx, sid, session.Expires).Err()
+		err = authDB.PExpireAt(common.BaseCtx, sid, session.Expires).Err()
 		if err != nil {
 			return SessionType{}, err
 		}

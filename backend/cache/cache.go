@@ -2,13 +2,21 @@
 package cache
 
 import (
+	"errors"
+	"fmt"
 	"os"
+	"time"
 
 	"github.com/go-redis/redis/v8"
+	"github.com/soumitradev/Dwitter/backend/common"
+	"github.com/soumitradev/Dwitter/backend/prisma/db"
+	"github.com/soumitradev/Dwitter/backend/util"
 )
 
 /*
 # Cache Design Philosophy
+
+Cached objects are cached with an hour-long expiry time. Why? idk.
 
 Dweets and user objects will be cached as seperate keys with key names such as:
 - user:full:myUsername:username
@@ -33,7 +41,7 @@ For redweets, we will cache the ID as "Redweet(authorID, originalRedweetID)" sin
 
 Redweets are always considered "full" objects (since they have child "basic" objects)
 
-Unrequested subtypes will not be cached, and will be represented with "<?>"
+Unrequested subtypes will not be cached, and will be represented with ["<?>"]
 
 Since this will not collide with any reasonable interpretation of any subtype, this is safe
 
@@ -89,11 +97,11 @@ We will first save the keys:
 - user:full:myUsername:email = "myemail@mail.com"
 - user:full:myUsername:bio = "Example bio"
 - user:full:myUsername:pfpURL = "https://..."
-- user:full:myUsername:dweets = "<?>"
-- user:full:myUsername:redweets = "<?>"
+- user:full:myUsername:dweets = ["<?>"]
+- user:full:myUsername:redweets = ["<?>"]
 - user:full:myUsername:feedObjects = [abcdefghi1, abcdefghi2, abcdefghi3, abcdefghi4, abcdefghi5]
-- user:full:myUsername:redweetedDweets = "<?>"
-- user:full:myUsername:likedDweets = "<?>"
+- user:full:myUsername:redweetedDweets = ["<?>"]
+- user:full:myUsername:likedDweets = ["<?>"]
 - user:full:myUsername:followerCount = "1236"
 - user:full:myUsername:followers = [follower1, follower2, ..., commonfollower1236]
 - user:full:myUsername:followingCount = "2317"
@@ -143,14 +151,41 @@ and then, we will cache
 
 this will also lead us to cache the other user with username otherUsername
 
-- user:basic:myUsername:username = "otherUsername"
-- user:basic:myUsername:name = "Other Name"
-- user:basic:myUsername:email = "myotheremail@mail.com"
-- user:basic:myUsername:bio = "Different bio"
-- user:basic:myUsername:pfpURL = "https://..."
-- user:basic:myUsername:followerCount = "1829"
-- user:basic:myUsername:followingCount = "2729"
-- user:basic:myUsername:createdAt = "2022-03-05T04:20:49.962Z"
+- user:basic:otherUsername:username = "otherUsername"
+- user:basic:otherUsername:name = "Other Name"
+- user:basic:otherUsername:email = "myotheremail@mail.com"
+- user:basic:otherUsername:bio = "Different bio"
+- user:basic:otherUsername:pfpURL = "https://..."
+- user:basic:otherUsername:followerCount = "1829"
+- user:basic:otherUsername:followingCount = "2729"
+- user:basic:otherUsername:createdAt = "2022-03-05T04:20:49.962Z"
+
+Some terms
+
+- Cache miss: A situation where the requested information is not sufficiently cached such that we must perform a full object fetch from the db
+
+- Partial cache miss: A situation where the requested information is partially cached, requiring us to only fetch a part of the object
+
+- Cache hit: A situation where the requested information is fully cached, and no DB operations need to be performed on the requested entity
+
+- Cache update: A situation where cached information needs to be updated
+
+To clear some of the confusion around partial cache miss, and cache miss in particular, we will look at examples:
+
+- When fetching a full user, if the user is not cached, or if the user is cached as a basic type, it is a cache miss
+
+- When fetching a full user, if some of the dweets, redweets, feedObjects... are not cached, it is a partial cache miss.
+In this case, only the requested information will be fetched and updated on the cache. We will not fetch the followers, following etc.
+
+===
+
+- All partial cache misses will result in a cache update
+
+- Mutations also result in a cache update
+
+- This implies all partial cache misses are cache updates but the reverse need not be true
+
+---
 
 I might consider pulling full objects from the DB when basic ones are needed just for the cache, but meh
 sounds like more work, and its also pretty inefficient. Plus, where do you end?
@@ -168,10 +203,597 @@ Whew that was a lot of work
 
 var cacheDB *redis.Client
 
+var uncachedStub string = "<?>"
+
 func InitCache() {
 	cacheDB = redis.NewClient(&redis.Options{
 		Addr:     "localhost:6421",
 		Password: os.Getenv("REDIS_6421_PASS"),
 		DB:       0,
 	})
+}
+
+func GenerateKey(objType, detailLevel, id, field string) string {
+	return objType + ":" + detailLevel + ":" + id + ":" + field
+}
+
+func ConstructRedweetID(authorID string, originalRedweetID string) string {
+	return "Redweet(" + authorID + ", " + originalRedweetID + ")"
+}
+
+// I realized this function is useless, so I'll replace it with a better one later that actually returns data on cache hit
+func CheckIfCached(objType, detailLevel, id string) (bool, error) {
+	var err error
+	if detailLevel == "full" {
+		if objType == "dweet" {
+			_, err = cacheDB.Get(common.BaseCtx, GenerateKey(objType, detailLevel, id, "id")).Result()
+		} else if objType == "user" {
+			_, err = cacheDB.Get(common.BaseCtx, GenerateKey(objType, detailLevel, id, "username")).Result()
+		} else if objType == "redweet" {
+			_, err = cacheDB.Get(common.BaseCtx, GenerateKey(objType, detailLevel, id, "author")).Result()
+		} else {
+			return false, errors.New("unknown objType")
+		}
+
+		if err == redis.Nil {
+			return false, nil
+		} else if err != nil {
+			return false, err
+		}
+	} else if detailLevel == "basic" {
+		if objType == "dweet" {
+			_, err = cacheDB.Get(common.BaseCtx, GenerateKey(objType, detailLevel, id, "id")).Result()
+		} else if objType == "user" {
+			_, err = cacheDB.Get(common.BaseCtx, GenerateKey(objType, detailLevel, id, "username")).Result()
+		} else {
+			return false, errors.New("unknown objType for detailLevel basic")
+		}
+
+		// If basic objects are not found, check their full counterparts
+		if err == redis.Nil {
+			if objType == "dweet" {
+				_, err = cacheDB.Get(common.BaseCtx, GenerateKey(objType, "full", id, "id")).Result()
+			} else {
+				_, err = cacheDB.Get(common.BaseCtx, GenerateKey(objType, "full", id, "username")).Result()
+			}
+
+			if err == redis.Nil {
+				return false, nil
+			} else if err != nil {
+				return false, err
+			}
+		} else if err != nil {
+			return false, err
+		}
+	} else {
+		return false, errors.New("unknown objType")
+	}
+
+	// No errors means we found the object
+	return true, nil
+}
+
+func CacheUser(detailLevel string, id string, obj *db.UserModel, objectsToFetch string, feedObjectsToFetch int, feedObjectsOffset int) error {
+	keyStem := GenerateKey("user", detailLevel, id, "")
+	userMap := map[string]interface{}{
+		keyStem + "username":       obj.Username,
+		keyStem + "name":           obj.Name,
+		keyStem + "email":          obj.Email,
+		keyStem + "bio":            obj.Bio,
+		keyStem + "pfpURL":         obj.ProfilePicURL,
+		keyStem + "followerCount":  obj.FollowerCount,
+		keyStem + "followingCount": obj.FollowingCount,
+		keyStem + "createdAt":      obj.CreatedAt,
+	}
+	err := cacheDB.MSet(common.BaseCtx, userMap).Err()
+	if err != nil {
+		return err
+	}
+
+	expireTime := time.Now().UTC().Add(time.Hour * 1)
+	for key := range userMap {
+		err = cacheDB.PExpireAt(common.BaseCtx, key, expireTime).Err()
+		if err != nil {
+			return err
+		}
+	}
+
+	if detailLevel == "basic" {
+		return nil
+	} else if detailLevel == "full" {
+		followersUserList := obj.Followers()
+		followers := make([]interface{}, len(followersUserList))
+		for i, user := range followersUserList {
+			followers[i] = user.Username
+			err := CacheUser("basic", user.Username, &followersUserList[i], "", 0, 0)
+			if err != nil {
+				return err
+			}
+		}
+
+		followingUserList := obj.Following()
+		following := make([]interface{}, len(followingUserList))
+		for i, user := range followingUserList {
+			following[i] = user.Username
+			err := CacheUser("basic", user.Username, &followingUserList[i], "", 0, 0)
+			if err != nil {
+				return err
+			}
+		}
+
+		err = cacheDB.LPush(common.BaseCtx, keyStem+"followers", followers...).Err()
+		if err != nil {
+			return err
+		}
+
+		err = cacheDB.PExpireAt(common.BaseCtx, keyStem+"followers", expireTime).Err()
+		if err != nil {
+			return err
+		}
+
+		err = cacheDB.LPush(common.BaseCtx, keyStem+"following", following...).Err()
+		if err != nil {
+			return err
+		}
+
+		err = cacheDB.PExpireAt(common.BaseCtx, keyStem+"following", expireTime).Err()
+		if err != nil {
+			return err
+		}
+
+		switch objectsToFetch {
+		case "feed":
+			err = cacheDB.LPush(common.BaseCtx, keyStem+"dweets", uncachedStub).Err()
+			if err != nil {
+				return err
+			}
+			err = cacheDB.LPush(common.BaseCtx, keyStem+"redweets", uncachedStub).Err()
+			if err != nil {
+				return err
+			}
+			err = cacheDB.LPush(common.BaseCtx, keyStem+"redweetedDweets", uncachedStub).Err()
+			if err != nil {
+				return err
+			}
+			err = cacheDB.LPush(common.BaseCtx, keyStem+"likedDweets", uncachedStub).Err()
+			if err != nil {
+				return err
+			}
+
+			if feedObjectsToFetch >= 0 {
+				err = cacheDB.LPush(common.BaseCtx, keyStem+"feedObjects", uncachedStub).Err()
+				if err != nil {
+					return err
+				}
+			}
+
+			merged := util.MergeDweetRedweetList(obj.Dweets(), obj.Redweets())
+			iterLen := util.Min(feedObjectsToFetch, len(merged))
+			feedObjectList := make([]interface{}, iterLen)
+			feedObjectIDList := make([]interface{}, iterLen)
+			for i := 0; i < iterLen; i++ {
+				feedObjectList[i] = merged[i+feedObjectsOffset]
+			}
+
+			for i, obj := range feedObjectList {
+				if dweet, ok := obj.(db.DweetModel); ok {
+					feedObjectIDList[i] = dweet.ID
+					err := CacheDweet("basic", dweet.ID, &dweet, 0, 0)
+					if err != nil {
+						return err
+					}
+				} else if redweet, ok := obj.(db.RedweetModel); ok {
+					feedObjectIDList[i] = ConstructRedweetID(redweet.AuthorID, redweet.OriginalRedweetID)
+					// err := CacheRedweet("full", redweet.AuthorID, redweet.OriginalRedweetID)
+					// if err != nil {
+					// 	return err
+					// }
+				} else {
+					return errors.New("internal server error")
+				}
+			}
+
+			err = cacheDB.LPush(common.BaseCtx, keyStem+"feedObjects", feedObjectIDList...).Err()
+			if err != nil {
+				return err
+			}
+
+			if feedObjectsOffset > 0 {
+				err = cacheDB.LPush(common.BaseCtx, keyStem+"feedObjects", "<"+fmt.Sprintf("%d", feedObjectsOffset)+">").Err()
+				if err != nil {
+					return err
+				}
+			}
+
+		case "dweet":
+			err = cacheDB.LPush(common.BaseCtx, keyStem+"feedObjects", uncachedStub).Err()
+			if err != nil {
+				return err
+			}
+			err = cacheDB.LPush(common.BaseCtx, keyStem+"redweets", uncachedStub).Err()
+			if err != nil {
+				return err
+			}
+			err = cacheDB.LPush(common.BaseCtx, keyStem+"redweetedDweets", uncachedStub).Err()
+			if err != nil {
+				return err
+			}
+			err = cacheDB.LPush(common.BaseCtx, keyStem+"likedDweets", uncachedStub).Err()
+			if err != nil {
+				return err
+			}
+
+			if feedObjectsToFetch >= 0 {
+				err = cacheDB.LPush(common.BaseCtx, keyStem+"dweets", uncachedStub).Err()
+				if err != nil {
+					return err
+				}
+			}
+
+			dweets := obj.Dweets()
+			dweetIDs := make([]interface{}, len(dweets))
+
+			for i, dweet := range dweets {
+				dweetIDs[i] = dweet.ID
+				err := CacheDweet("basic", dweet.ID, &dweet, 0, 0)
+				if err != nil {
+					return err
+				}
+			}
+
+			err = cacheDB.LPush(common.BaseCtx, keyStem+"dweets", dweetIDs...).Err()
+			if err != nil {
+				return err
+			}
+
+			if feedObjectsOffset > 0 {
+				err = cacheDB.LPush(common.BaseCtx, keyStem+"dweets", "<"+fmt.Sprintf("%d", feedObjectsOffset)+">").Err()
+				if err != nil {
+					return err
+				}
+			}
+
+		case "redweet":
+			err = cacheDB.LPush(common.BaseCtx, keyStem+"feedObjects", uncachedStub).Err()
+			if err != nil {
+				return err
+			}
+			err = cacheDB.LPush(common.BaseCtx, keyStem+"redweets", uncachedStub).Err()
+			if err != nil {
+				return err
+			}
+			err = cacheDB.LPush(common.BaseCtx, keyStem+"redweetedDweets", uncachedStub).Err()
+			if err != nil {
+				return err
+			}
+			err = cacheDB.LPush(common.BaseCtx, keyStem+"likedDweets", uncachedStub).Err()
+			if err != nil {
+				return err
+			}
+
+			if feedObjectsToFetch >= 0 {
+				err = cacheDB.LPush(common.BaseCtx, keyStem+"redweets", uncachedStub).Err()
+				if err != nil {
+					return err
+				}
+			}
+
+			redweets := obj.Redweets()
+			redweetIDs := make([]interface{}, len(redweets))
+
+			for i, redweet := range redweets {
+				redweetIDs[i] = ConstructRedweetID(redweet.AuthorID, redweet.OriginalRedweetID)
+				// err := CacheRedweet("full", redweet.AuthorID, redweet.OriginalRedweetID)
+				// if err != nil {
+				// 	return err
+				// }
+			}
+
+			err = cacheDB.LPush(common.BaseCtx, keyStem+"redweets", redweetIDs...).Err()
+			if err != nil {
+				return err
+			}
+
+			if feedObjectsOffset > 0 {
+				err = cacheDB.LPush(common.BaseCtx, keyStem+"redweets", "<"+fmt.Sprintf("%d", feedObjectsOffset)+">").Err()
+				if err != nil {
+					return err
+				}
+			}
+
+		case "redweetedDweet":
+			err = cacheDB.LPush(common.BaseCtx, keyStem+"feedObjects", uncachedStub).Err()
+			if err != nil {
+				return err
+			}
+			err = cacheDB.LPush(common.BaseCtx, keyStem+"redweets", uncachedStub).Err()
+			if err != nil {
+				return err
+			}
+			err = cacheDB.LPush(common.BaseCtx, keyStem+"dweets", uncachedStub).Err()
+			if err != nil {
+				return err
+			}
+			err = cacheDB.LPush(common.BaseCtx, keyStem+"likedDweets", uncachedStub).Err()
+			if err != nil {
+				return err
+			}
+
+			if feedObjectsToFetch >= 0 {
+				err = cacheDB.LPush(common.BaseCtx, keyStem+"redweetedDweets", uncachedStub).Err()
+				if err != nil {
+					return err
+				}
+			}
+
+			dweets := obj.RedweetedDweets()
+			dweetIDs := make([]interface{}, len(dweets))
+
+			for i, dweet := range dweets {
+				dweetIDs[i] = dweet.ID
+				err := CacheDweet("basic", dweet.ID, &dweet, 0, 0)
+				if err != nil {
+					return err
+				}
+			}
+
+			err = cacheDB.LPush(common.BaseCtx, keyStem+"redweetedDweets", dweetIDs...).Err()
+			if err != nil {
+				return err
+			}
+
+			if feedObjectsOffset > 0 {
+				err = cacheDB.LPush(common.BaseCtx, keyStem+"redweetedDweets", "<"+fmt.Sprintf("%d", feedObjectsOffset)+">").Err()
+				if err != nil {
+					return err
+				}
+			}
+
+		case "liked":
+			err = cacheDB.LPush(common.BaseCtx, keyStem+"feedObjects", uncachedStub).Err()
+			if err != nil {
+				return err
+			}
+			err = cacheDB.LPush(common.BaseCtx, keyStem+"redweets", uncachedStub).Err()
+			if err != nil {
+				return err
+			}
+			err = cacheDB.LPush(common.BaseCtx, keyStem+"redweetedDweets", uncachedStub).Err()
+			if err != nil {
+				return err
+			}
+			err = cacheDB.LPush(common.BaseCtx, keyStem+"dweets", uncachedStub).Err()
+			if err != nil {
+				return err
+			}
+
+			if feedObjectsToFetch >= 0 {
+				err = cacheDB.LPush(common.BaseCtx, keyStem+"likedDweets", uncachedStub).Err()
+				if err != nil {
+					return err
+				}
+			}
+
+			dweets := obj.LikedDweets()
+			dweetIDs := make([]interface{}, len(dweets))
+
+			for i, dweet := range dweets {
+				dweetIDs[i] = dweet.ID
+				err := CacheDweet("basic", dweet.ID, &dweet, 0, 0)
+				if err != nil {
+					return err
+				}
+			}
+
+			err = cacheDB.LPush(common.BaseCtx, keyStem+"likedDweets", dweetIDs...).Err()
+			if err != nil {
+				return err
+			}
+
+			if feedObjectsOffset > 0 {
+				err = cacheDB.LPush(common.BaseCtx, keyStem+"likedDweets", "<"+fmt.Sprintf("%d", feedObjectsOffset)+">").Err()
+				if err != nil {
+					return err
+				}
+			}
+
+		default:
+			return errors.New("unknown objectsToFetch")
+		}
+
+		err = cacheDB.PExpireAt(common.BaseCtx, keyStem+"dweets", expireTime).Err()
+		if err != nil {
+			return err
+		}
+		err = cacheDB.PExpireAt(common.BaseCtx, keyStem+"redweets", expireTime).Err()
+		if err != nil {
+			return err
+		}
+		err = cacheDB.PExpireAt(common.BaseCtx, keyStem+"feedObjects", expireTime).Err()
+		if err != nil {
+			return err
+		}
+		err = cacheDB.PExpireAt(common.BaseCtx, keyStem+"dweets", expireTime).Err()
+		if err != nil {
+			return err
+		}
+		err = cacheDB.PExpireAt(common.BaseCtx, keyStem+"dweets", expireTime).Err()
+		if err != nil {
+			return err
+		}
+
+		return nil
+	} else {
+		return errors.New("unknown detailLevel")
+	}
+}
+
+func CacheDweet(detailLevel string, id string, obj *db.DweetModel, repliesToFetch int, replyOffset int) error {
+	keyStem := GenerateKey("dweet", detailLevel, id, "")
+	dweetMap := map[string]interface{}{
+		keyStem + "dweetBody":       obj.DweetBody,
+		keyStem + "id":              obj.ID,
+		keyStem + "author":          obj.AuthorID,
+		keyStem + "authorID":        obj.AuthorID,
+		keyStem + "postedAt":        obj.PostedAt,
+		keyStem + "lastUpdatedAt":   obj.LastUpdatedAt,
+		keyStem + "likeCount":       obj.LikeCount,
+		keyStem + "isReply":         obj.IsReply,
+		keyStem + "originalReplyID": obj.OriginalReplyID,
+		keyStem + "replyCount":      obj.ReplyCount,
+		keyStem + "redweetCount":    obj.RedweetCount,
+		keyStem + "media":           obj.Media,
+	}
+
+	err := cacheDB.MSet(common.BaseCtx, dweetMap).Err()
+	if err != nil {
+		return err
+	}
+
+	err = CacheUser("basic", obj.AuthorID, obj.Author(), "feed", 0, 0)
+	if err != nil {
+		return err
+	}
+
+	expireTime := time.Now().UTC().Add(time.Hour * 1)
+	for key := range dweetMap {
+		err = cacheDB.PExpireAt(common.BaseCtx, key, expireTime).Err()
+		if err != nil {
+			return err
+		}
+	}
+	if detailLevel == "basic" {
+		return nil
+	} else if detailLevel == "full" {
+		likeUsers := obj.LikeUsers()
+		likeUserIDs := make([]interface{}, len(likeUsers))
+
+		for i, user := range likeUsers {
+			likeUserIDs[i] = user.Username
+			err := CacheUser("basic", user.Username, &user, "feed", 0, 0)
+			if err != nil {
+				return err
+			}
+		}
+
+		redweetUsers := obj.RedweetUsers()
+		redweetUserIDs := make([]interface{}, len(redweetUsers))
+
+		for i, user := range redweetUsers {
+			redweetUserIDs[i] = user.Username
+			err := CacheUser("basic", user.Username, &user, "feed", 0, 0)
+			if err != nil {
+				return err
+			}
+		}
+
+		err = cacheDB.LPush(common.BaseCtx, keyStem+"likeUsers", likeUserIDs...).Err()
+		if err != nil {
+			return err
+		}
+
+		err = cacheDB.PExpireAt(common.BaseCtx, keyStem+"likeUsers", expireTime).Err()
+		if err != nil {
+			return err
+		}
+
+		err = cacheDB.LPush(common.BaseCtx, keyStem+"redweetUsers", redweetUserIDs...).Err()
+		if err != nil {
+			return err
+		}
+
+		err = cacheDB.PExpireAt(common.BaseCtx, keyStem+"redweetUsers", expireTime).Err()
+		if err != nil {
+			return err
+		}
+
+		if obj.IsReply {
+			if replyTo, ok := obj.ReplyTo(); ok {
+				err := CacheDweet("basic", replyTo.ID, replyTo, 0, 0)
+				if err != nil {
+					return err
+				}
+
+				err = cacheDB.Do(common.BaseCtx, "set", keyStem+"replyTo", replyTo.ID, "PXAT", expireTime.UnixNano()/int64(time.Millisecond)).Err()
+				if err != nil {
+					return err
+				}
+			} else {
+				return errors.New("internal server error")
+			}
+		}
+
+		if repliesToFetch >= 0 {
+			err = cacheDB.LPush(common.BaseCtx, keyStem+"replyDweets", uncachedStub).Err()
+			if err != nil {
+				return err
+			}
+		}
+
+		replyDweets := obj.ReplyDweets()
+		replyDweetIDs := make([]interface{}, len(replyDweets))
+
+		for i, dweet := range replyDweets {
+			replyDweetIDs[i] = dweet.ID
+			err := CacheDweet("basic", dweet.ID, &dweet, 0, 0)
+			if err != nil {
+				return err
+			}
+		}
+
+		err = cacheDB.LPush(common.BaseCtx, keyStem+"replyDweets", replyDweetIDs...).Err()
+		if err != nil {
+			return err
+		}
+
+		if replyOffset > 0 {
+			err = cacheDB.LPush(common.BaseCtx, keyStem+"likedDweets", "<"+fmt.Sprintf("%d", replyOffset)+">").Err()
+			if err != nil {
+				return err
+			}
+		}
+
+		return nil
+	} else {
+		return errors.New("unknown detailLevel")
+	}
+}
+
+func CacheRedweet(detailLevel string, id string, obj *db.RedweetModel, repliesToFetch int, replyOffset int) error {
+	if detailLevel == "full" {
+		keyStem := GenerateKey("redweet", detailLevel, ConstructRedweetID(obj.AuthorID, obj.OriginalRedweetID), "")
+		dweetMap := map[string]interface{}{
+			keyStem + "author":            obj.AuthorID,
+			keyStem + "authorID":          obj.AuthorID,
+			keyStem + "redweetOf":         obj.OriginalRedweetID,
+			keyStem + "originalRedweetID": obj.OriginalRedweetID,
+			keyStem + "redweetTime":       obj.RedweetTime,
+		}
+
+		err := cacheDB.MSet(common.BaseCtx, dweetMap).Err()
+		if err != nil {
+			return err
+		}
+
+		expireTime := time.Now().UTC().Add(time.Hour * 1)
+		for key := range dweetMap {
+			err = cacheDB.PExpireAt(common.BaseCtx, key, expireTime).Err()
+			if err != nil {
+				return err
+			}
+		}
+
+		err = CacheUser("basic", obj.AuthorID, obj.Author(), "feed", 0, 0)
+		if err != nil {
+			return err
+		}
+		err = CacheDweet("basic", obj.OriginalRedweetID, obj.RedweetOf(), 0, 0)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	} else {
+		return errors.New("unknown detailLevel")
+	}
 }

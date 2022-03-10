@@ -262,8 +262,11 @@ func UpdateUser(username string, name string, email string, bio string, PfpUrl s
 					}
 
 					merged := util.MergeDweetRedweetList(user.Dweets(), user.Redweets())
-
-					feedObjectList = append(feedObjectList, merged...)
+					iterLen := util.Min(feedObjectsToFetch, len(merged))
+					feedObjectList := make([]interface{}, iterLen)
+					for i := 0; i < iterLen; i++ {
+						feedObjectList[i] = merged[i+feedObjectsOffset]
+					}
 				case "dweet":
 					user, err = common.Client.User.FindUnique(
 						db.User.Username.Equals(username),
@@ -608,8 +611,11 @@ func UpdateUser(username string, name string, email string, bio string, PfpUrl s
 					}
 
 					merged := util.MergeDweetRedweetList(user.Dweets(), user.Redweets())
-
-					feedObjectList = append(feedObjectList, merged...)
+					iterLen := util.Min(feedObjectsToFetch, len(merged))
+					feedObjectList := make([]interface{}, iterLen)
+					for i := 0; i < iterLen; i++ {
+						feedObjectList[i] = merged[i+feedObjectsOffset]
+					}
 				case "dweet":
 					user, err = common.Client.User.FindUnique(
 						db.User.Username.Equals(username),
@@ -957,8 +963,11 @@ func UpdateUser(username string, name string, email string, bio string, PfpUrl s
 					}
 
 					merged := util.MergeDweetRedweetList(user.Dweets(), user.Redweets())
-
-					feedObjectList = append(feedObjectList, merged...)
+					iterLen := util.Min(feedObjectsToFetch, len(merged))
+					feedObjectList := make([]interface{}, iterLen)
+					for i := 0; i < iterLen; i++ {
+						feedObjectList[i] = merged[i+feedObjectsOffset]
+					}
 				case "dweet":
 					user, err = common.Client.User.FindUnique(
 						db.User.Username.Equals(username),
@@ -1303,8 +1312,11 @@ func UpdateUser(username string, name string, email string, bio string, PfpUrl s
 					}
 
 					merged := util.MergeDweetRedweetList(user.Dweets(), user.Redweets())
-
-					feedObjectList = append(feedObjectList, merged...)
+					iterLen := util.Min(feedObjectsToFetch, len(merged))
+					feedObjectList := make([]interface{}, iterLen)
+					for i := 0; i < iterLen; i++ {
+						feedObjectList[i] = merged[i+feedObjectsOffset]
+					}
 				case "dweet":
 					user, err = common.Client.User.FindUnique(
 						db.User.Username.Equals(username),
