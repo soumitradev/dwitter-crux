@@ -37,7 +37,6 @@ type loginType struct {
 
 var timeUTCFormat string = "Mon, 2 Jan 2006 15:04:05 MST"
 
-// TODO: Move to redis
 func InitAuth() {
 	authDB = redis.NewClient(&redis.Options{
 		Addr:     "localhost:6420",

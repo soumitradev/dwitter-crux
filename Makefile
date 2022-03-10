@@ -17,6 +17,7 @@ psql:
 
 redis:
 	sudo /etc/init.d/redis_6420 start
+	sudo /etc/init.d/redis_6421 start
 
 kill:
 	@ps axf | grep "test dev 127.0.0.1" | grep -v grep | awk '{print "sudo kill " $$1}'

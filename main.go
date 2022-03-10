@@ -16,6 +16,7 @@ import (
 	"github.com/graphql-go/handler"
 	"github.com/joho/godotenv"
 	"github.com/soumitradev/Dwitter/backend/auth"
+	"github.com/soumitradev/Dwitter/backend/cache"
 	"github.com/soumitradev/Dwitter/backend/cdn"
 	"github.com/soumitradev/Dwitter/backend/common"
 	"github.com/soumitradev/Dwitter/backend/database"
@@ -38,8 +39,9 @@ func main() {
 	// Initialize sendgrid
 	common.InitSendgrid()
 
-	// Initialize redis auth db
+	// Initialize redis dbs
 	auth.InitAuth()
+	cache.InitCache()
 
 	// Check for an error in schema at runtime
 	if gql.SchemaError != nil {
@@ -108,7 +110,7 @@ func main() {
 	router.Use(middleware.RecoveryHandler)
 	router.Use(middleware.SizeHandler)
 	router.Use(secureMiddleware.Handler)
-	// CORS Handler. Make sure to turn on/off in production!
+	// CORS Handler. TODO: Make sure to turn on/off in production!
 	router.Use(middleware.CORSTestingHandler)
 
 	// Create an HTTP server
