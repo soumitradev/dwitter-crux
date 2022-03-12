@@ -354,3 +354,43 @@ func ResolvePartialHitUser(id string, objectsToFetch string, feedObjectsToFetch 
 		return []interface{}{}, errors.New("unknown objectsToFetch")
 	}
 }
+
+func ResolvePartialHitDweet(id string, repliesToFetch int, replyOffset int) ([]interface{}, error) {
+	var dweet *db.DweetModel
+	var err error
+
+	if repliesToFetch < 0 {
+		dweet, err = common.Client.Dweet.FindUnique(
+			db.Dweet.ID.Equals(id),
+		).With(
+			db.Dweet.ReplyDweets.Fetch().With(
+				db.Dweet.Author.Fetch(),
+			).OrderBy(
+				db.Dweet.LikeCount.Order(db.DESC),
+			).Take(repliesToFetch).Skip(replyOffset),
+		).Exec(common.BaseCtx)
+	} else {
+		dweet, err = common.Client.Dweet.FindUnique(
+			db.Dweet.ID.Equals(id),
+		).With(
+			db.Dweet.ReplyDweets.Fetch().With(
+				db.Dweet.Author.Fetch(),
+			).OrderBy(
+				db.Dweet.LikeCount.Order(db.DESC),
+			).Take(repliesToFetch).Skip(replyOffset),
+		).Exec(common.BaseCtx)
+	}
+	if err == db.ErrNotFound {
+		return []interface{}{}, fmt.Errorf("dweet not found: %v", err)
+	}
+	if err != nil {
+		return []interface{}{}, fmt.Errorf("internal server error: %v", err)
+	}
+
+	replyDweets := dweet.ReplyDweets()
+	replyObjectList := make([]interface{}, util.Min(repliesToFetch, len(replyDweets)))
+	for i := range replyObjectList {
+		replyObjectList[i] = replyDweets[i]
+	}
+	return replyObjectList, nil
+}

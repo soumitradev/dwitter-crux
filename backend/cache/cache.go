@@ -225,7 +225,6 @@ Whew that was a lot of work
 */
 
 // TODO:
-// - Add "get from cache" function(s) for dweets and redweets (including detector for full cache hits, partial cache hits, and full cache misses)
 // - Add update cache functions for mutations
 // - Integrate with the rest of the API
 
@@ -586,20 +585,29 @@ func CacheUser(detailLevel string, id string, obj *db.UserModel, objectsToFetch 
 
 func CacheDweet(detailLevel string, id string, obj *db.DweetModel, repliesToFetch int, replyOffset int) error {
 	keyStem := GenerateKey("dweet", detailLevel, id, "")
+	isReply := "false"
+	if obj.IsReply {
+		isReply = "true"
+	}
 	dweetMap := map[string]interface{}{
 		keyStem + "dweetBody":       obj.DweetBody,
 		keyStem + "id":              obj.ID,
 		keyStem + "author":          obj.AuthorID,
 		keyStem + "authorID":        obj.AuthorID,
-		keyStem + "postedAt":        obj.PostedAt,
-		keyStem + "lastUpdatedAt":   obj.LastUpdatedAt,
-		keyStem + "likeCount":       obj.LikeCount,
-		keyStem + "isReply":         obj.IsReply,
+		keyStem + "postedAt":        obj.PostedAt.UTC().Format(util.TimeUTCFormat),
+		keyStem + "lastUpdatedAt":   obj.LastUpdatedAt.UTC().Format(util.TimeUTCFormat),
+		keyStem + "likeCount":       strconv.Itoa(obj.LikeCount),
+		keyStem + "isReply":         isReply,
 		keyStem + "originalReplyID": obj.OriginalReplyID,
-		keyStem + "replyCount":      obj.ReplyCount,
-		keyStem + "redweetCount":    obj.RedweetCount,
-		keyStem + "media":           obj.Media,
+		keyStem + "replyCount":      strconv.Itoa(obj.ReplyCount),
+		keyStem + "redweetCount":    strconv.Itoa(obj.RedweetCount),
 	}
+
+	interfaceList := make([]interface{}, len(obj.Media))
+	for i, mediaLink := range obj.Media {
+		interfaceList[i] = mediaLink
+	}
+	cacheDB.LPush(common.BaseCtx, keyStem+"media", interfaceList...)
 
 	err := cacheDB.MSet(common.BaseCtx, dweetMap).Err()
 	if err != nil {
@@ -675,7 +683,10 @@ func CacheDweet(detailLevel string, id string, obj *db.DweetModel, repliesToFetc
 					return err
 				}
 			} else {
-				return errors.New("internal server error")
+				err = cacheDB.Do(common.BaseCtx, "set", keyStem+"replyTo", "", "PXAT", expireTime.UnixNano()/int64(time.Millisecond)).Err()
+				if err != nil {
+					return err
+				}
 			}
 		}
 
