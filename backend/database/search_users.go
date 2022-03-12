@@ -154,7 +154,7 @@ func SearchUsersUnauth(query string, numberToFetch int, numOffset int, objectsTo
 						db.Dweet.Author.Fetch(),
 					).OrderBy(
 						db.Dweet.PostedAt.Order(db.DESC),
-					).Take(feedObjectsToFetch).Skip(feedObjectsOffset),
+					).Skip(feedObjectsOffset).Take(feedObjectsToFetch),
 				).OrderBy(
 					db.User.FollowerCount.Order(db.DESC),
 				).Exec(common.BaseCtx)
@@ -174,7 +174,7 @@ func SearchUsersUnauth(query string, numberToFetch int, numOffset int, objectsTo
 						db.Redweet.RedweetOf.Fetch(),
 					).OrderBy(
 						db.Redweet.RedweetTime.Order(db.DESC),
-					).Take(feedObjectsToFetch).Skip(feedObjectsOffset),
+					).Skip(feedObjectsOffset).Take(feedObjectsToFetch),
 				).OrderBy(
 					db.User.FollowerCount.Order(db.DESC),
 				).Exec(common.BaseCtx)
@@ -193,7 +193,7 @@ func SearchUsersUnauth(query string, numberToFetch int, numOffset int, objectsTo
 						db.Dweet.Author.Fetch(),
 					).OrderBy(
 						db.Dweet.PostedAt.Order(db.DESC),
-					).Take(feedObjectsToFetch).Skip(feedObjectsOffset),
+					).Skip(feedObjectsOffset).Take(feedObjectsToFetch),
 				).OrderBy(
 					db.User.FollowerCount.Order(db.DESC),
 				).Exec(common.BaseCtx)
@@ -332,7 +332,7 @@ func SearchUsersUnauth(query string, numberToFetch int, numOffset int, objectsTo
 						db.Dweet.Author.Fetch(),
 					).OrderBy(
 						db.Dweet.PostedAt.Order(db.DESC),
-					).Take(feedObjectsToFetch).Skip(feedObjectsOffset),
+					).Skip(feedObjectsOffset).Take(feedObjectsToFetch),
 				).OrderBy(
 					db.User.FollowerCount.Order(db.DESC),
 				).Take(numberToFetch).Skip(numOffset).Exec(common.BaseCtx)
@@ -352,7 +352,7 @@ func SearchUsersUnauth(query string, numberToFetch int, numOffset int, objectsTo
 						db.Redweet.RedweetOf.Fetch(),
 					).OrderBy(
 						db.Redweet.RedweetTime.Order(db.DESC),
-					).Take(feedObjectsToFetch).Skip(feedObjectsOffset),
+					).Skip(feedObjectsOffset).Take(feedObjectsToFetch),
 				).OrderBy(
 					db.User.FollowerCount.Order(db.DESC),
 				).Take(numberToFetch).Skip(numOffset).Exec(common.BaseCtx)
@@ -371,7 +371,7 @@ func SearchUsersUnauth(query string, numberToFetch int, numOffset int, objectsTo
 						db.Dweet.Author.Fetch(),
 					).OrderBy(
 						db.Dweet.PostedAt.Order(db.DESC),
-					).Take(feedObjectsToFetch).Skip(feedObjectsOffset),
+					).Skip(feedObjectsOffset).Take(feedObjectsToFetch),
 				).OrderBy(
 					db.User.FollowerCount.Order(db.DESC),
 				).Take(numberToFetch).Skip(numOffset).Exec(common.BaseCtx)
@@ -601,7 +601,7 @@ func SearchUsers(query string, numberToFetch int, numOffset int, objectsToFetch 
 						db.Dweet.Author.Fetch(),
 					).OrderBy(
 						db.Dweet.PostedAt.Order(db.DESC),
-					).Take(feedObjectsToFetch).Skip(feedObjectsOffset),
+					).Skip(feedObjectsOffset).Take(feedObjectsToFetch),
 					db.User.Followers.Fetch().OrderBy(
 						db.User.FollowerCount.Order(db.DESC),
 					),
@@ -627,7 +627,7 @@ func SearchUsers(query string, numberToFetch int, numOffset int, objectsToFetch 
 						db.Redweet.RedweetOf.Fetch(),
 					).OrderBy(
 						db.Redweet.RedweetTime.Order(db.DESC),
-					).Take(feedObjectsToFetch).Skip(feedObjectsOffset),
+					).Skip(feedObjectsOffset).Take(feedObjectsToFetch),
 					db.User.Followers.Fetch().OrderBy(
 						db.User.FollowerCount.Order(db.DESC),
 					),
@@ -652,7 +652,7 @@ func SearchUsers(query string, numberToFetch int, numOffset int, objectsToFetch 
 						db.Dweet.Author.Fetch(),
 					).OrderBy(
 						db.Dweet.PostedAt.Order(db.DESC),
-					).Take(feedObjectsToFetch).Skip(feedObjectsOffset),
+					).Skip(feedObjectsOffset).Take(feedObjectsToFetch),
 					db.User.Followers.Fetch().OrderBy(
 						db.User.FollowerCount.Order(db.DESC),
 					),
@@ -827,7 +827,7 @@ func SearchUsers(query string, numberToFetch int, numOffset int, objectsToFetch 
 						db.Dweet.Author.Fetch(),
 					).OrderBy(
 						db.Dweet.PostedAt.Order(db.DESC),
-					).Take(feedObjectsToFetch).Skip(feedObjectsOffset),
+					).Skip(feedObjectsOffset).Take(feedObjectsToFetch),
 					db.User.Followers.Fetch().OrderBy(
 						db.User.FollowerCount.Order(db.DESC),
 					),
@@ -853,7 +853,7 @@ func SearchUsers(query string, numberToFetch int, numOffset int, objectsToFetch 
 						db.Redweet.RedweetOf.Fetch(),
 					).OrderBy(
 						db.Redweet.RedweetTime.Order(db.DESC),
-					).Take(feedObjectsToFetch).Skip(feedObjectsOffset),
+					).Skip(feedObjectsOffset).Take(feedObjectsToFetch),
 					db.User.Followers.Fetch().OrderBy(
 						db.User.FollowerCount.Order(db.DESC),
 					),
@@ -878,7 +878,7 @@ func SearchUsers(query string, numberToFetch int, numOffset int, objectsToFetch 
 						db.Dweet.Author.Fetch(),
 					).OrderBy(
 						db.Dweet.PostedAt.Order(db.DESC),
-					).Take(feedObjectsToFetch).Skip(feedObjectsOffset),
+					).Skip(feedObjectsOffset).Take(feedObjectsToFetch),
 					db.User.Followers.Fetch().OrderBy(
 						db.User.FollowerCount.Order(db.DESC),
 					),

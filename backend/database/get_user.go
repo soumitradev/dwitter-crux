@@ -200,7 +200,7 @@ func GetUserUnauth(username string, objectsToFetch string, feedObjectsToFetch in
 					db.Dweet.Author.Fetch(),
 				).OrderBy(
 					db.Dweet.PostedAt.Order(db.DESC),
-				).Take(feedObjectsToFetch).Skip(feedObjectsOffset),
+				).Skip(feedObjectsOffset).Take(feedObjectsToFetch),
 				db.User.Followers.Fetch().OrderBy(
 					db.User.FollowerCount.Order(db.DESC),
 				),
@@ -230,7 +230,7 @@ func GetUserUnauth(username string, objectsToFetch string, feedObjectsToFetch in
 					),
 				).OrderBy(
 					db.Redweet.RedweetTime.Order(db.DESC),
-				).Take(feedObjectsToFetch).Skip(feedObjectsOffset),
+				).Skip(feedObjectsOffset).Take(feedObjectsToFetch),
 				db.User.Followers.Fetch().OrderBy(
 					db.User.FollowerCount.Order(db.DESC),
 				),
@@ -257,7 +257,7 @@ func GetUserUnauth(username string, objectsToFetch string, feedObjectsToFetch in
 					db.Dweet.Author.Fetch(),
 				).OrderBy(
 					db.Dweet.PostedAt.Order(db.DESC),
-				).Take(feedObjectsToFetch).Skip(feedObjectsOffset),
+				).Skip(feedObjectsOffset).Take(feedObjectsToFetch),
 				db.User.Followers.Fetch().OrderBy(
 					db.User.FollowerCount.Order(db.DESC),
 				),
@@ -531,7 +531,7 @@ func GetUser(username string, objectsToFetch string, feedObjectsToFetch int, fee
 					db.Dweet.Author.Fetch(),
 				).OrderBy(
 					db.Dweet.PostedAt.Order(db.DESC),
-				).Take(feedObjectsToFetch).Skip(feedObjectsOffset),
+				).Skip(feedObjectsOffset).Take(feedObjectsToFetch),
 				db.User.Followers.Fetch().OrderBy(
 					db.User.FollowerCount.Order(db.DESC),
 				),
@@ -561,7 +561,7 @@ func GetUser(username string, objectsToFetch string, feedObjectsToFetch int, fee
 					),
 				).OrderBy(
 					db.Redweet.RedweetTime.Order(db.DESC),
-				).Take(feedObjectsToFetch).Skip(feedObjectsOffset),
+				).Skip(feedObjectsOffset).Take(feedObjectsToFetch),
 				db.User.Followers.Fetch().OrderBy(
 					db.User.FollowerCount.Order(db.DESC),
 				),
@@ -588,7 +588,7 @@ func GetUser(username string, objectsToFetch string, feedObjectsToFetch int, fee
 					db.Dweet.Author.Fetch(),
 				).OrderBy(
 					db.Dweet.PostedAt.Order(db.DESC),
-				).Take(feedObjectsToFetch).Skip(feedObjectsOffset),
+				).Skip(feedObjectsOffset).Take(feedObjectsToFetch),
 				db.User.Followers.Fetch().OrderBy(
 					db.User.FollowerCount.Order(db.DESC),
 				),
@@ -616,7 +616,7 @@ func GetUser(username string, objectsToFetch string, feedObjectsToFetch int, fee
 						db.Dweet.Author.Fetch(),
 					).OrderBy(
 						db.Dweet.PostedAt.Order(db.DESC),
-					).Take(feedObjectsToFetch).Skip(feedObjectsOffset),
+					).Skip(feedObjectsOffset).Take(feedObjectsToFetch),
 					db.User.Followers.Fetch().OrderBy(
 						db.User.FollowerCount.Order(db.DESC),
 					),

@@ -342,7 +342,7 @@ func DeleteUser(username string, objectsToFetch string, feedObjectsToFetch int, 
 					db.Dweet.Author.Fetch(),
 				).OrderBy(
 					db.Dweet.PostedAt.Order(db.DESC),
-				).Take(feedObjectsToFetch).Skip(feedObjectsOffset),
+				).Skip(feedObjectsOffset).Take(feedObjectsToFetch),
 				db.User.Followers.Fetch().OrderBy(
 					db.User.FollowerCount.Order(db.DESC),
 				),
@@ -372,7 +372,7 @@ func DeleteUser(username string, objectsToFetch string, feedObjectsToFetch int, 
 					),
 				).OrderBy(
 					db.Redweet.RedweetTime.Order(db.DESC),
-				).Take(feedObjectsToFetch).Skip(feedObjectsOffset),
+				).Skip(feedObjectsOffset).Take(feedObjectsToFetch),
 				db.User.Followers.Fetch().OrderBy(
 					db.User.FollowerCount.Order(db.DESC),
 				),
@@ -399,7 +399,7 @@ func DeleteUser(username string, objectsToFetch string, feedObjectsToFetch int, 
 					db.Dweet.Author.Fetch(),
 				).OrderBy(
 					db.Dweet.PostedAt.Order(db.DESC),
-				).Take(feedObjectsToFetch).Skip(feedObjectsOffset),
+				).Skip(feedObjectsOffset).Take(feedObjectsToFetch),
 				db.User.Followers.Fetch().OrderBy(
 					db.User.FollowerCount.Order(db.DESC),
 				),
@@ -426,7 +426,7 @@ func DeleteUser(username string, objectsToFetch string, feedObjectsToFetch int, 
 					db.Dweet.Author.Fetch(),
 				).OrderBy(
 					db.Dweet.PostedAt.Order(db.DESC),
-				).Take(feedObjectsToFetch).Skip(feedObjectsOffset),
+				).Skip(feedObjectsOffset).Take(feedObjectsToFetch),
 				db.User.Followers.Fetch().OrderBy(
 					db.User.FollowerCount.Order(db.DESC),
 				),

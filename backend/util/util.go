@@ -13,6 +13,7 @@ import (
 
 const AlphanumBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 const LoweralphaBytes = "abcdefghijklmnopqrstuvwxyz"
+const TimeUTCFormat = "Mon, 2 Jan 2006 15:04:05 MST"
 
 // More secure random seeding than usual: https://stackoverflow.com/a/54491783
 func init() {

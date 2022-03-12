@@ -4,10 +4,9 @@ package cache
 import (
 	"errors"
 	"fmt"
-	"os"
+	"strconv"
 	"time"
 
-	"github.com/go-redis/redis/v8"
 	"github.com/soumitradev/Dwitter/backend/common"
 	"github.com/soumitradev/Dwitter/backend/prisma/db"
 	"github.com/soumitradev/Dwitter/backend/util"
@@ -164,7 +163,31 @@ Some terms
 
 - Cache miss: A situation where the requested information is not sufficiently cached such that we must perform a full object fetch from the db
 
-- Partial cache miss: A situation where the requested information is partially cached, requiring us to only fetch a part of the object
+- Partial cache miss: A situation where the requested information is partially cached, requiring us to only fetch a part of the object.
+
+Consider a case where one dweet is cached, the one before and after it isn't, but the one 2 spaces ahead of it is.
+[<1>, X, <1>, X+2]
+Consider such a case where the dweet being talked about is X, and the dweets requested are: the one before X, X, one after X and second one after X
+Such a case will still be considered a partial cache miss, but X will not be considered cached, since it is highly inefficient to perform multiple DB fetches (DB fetches need to be contiguous)
+Note that this isn't a cache miss however, so the contiguous edge cached values are considered cached, and will be used from the cache.
+
+This is to maintain a degree of speed in such an operation, since even one non-contiguous occurence of an uncached value can ruin the cached-ness of these values
+
+Let us look at some edge cases though
+
+Consider
+[X-3, X-2, <1>, X, <1>, X+2]
+Here, we have two edge cached values that we can consider cached. Since we can make a contiguous fetch for the part <1> X <1>, both the edges are considered cached
+
+Consider
+[<1>, X, <1>]
+Here, there are no edge cached values. This is considered a cache miss
+
+Consider
+[<1>, X, <1>, X+2, X+3, X+4, ..., X+10000000, <1>]
+Here, there are no edge cached values. This is unfortunately also considered a cache miss.
+Of course, the resulting operation might be much slower than fetching 3 of these uncached values, but this is an extreme case, and I can't imagine a better solution that isnt painful to implement.
+
 
 - Cache hit: A situation where the requested information is fully cached, and no DB operations need to be performed on the requested entity
 
@@ -201,77 +224,10 @@ But hey this is already pretty painful, and I'm almost next to sure that somethi
 Whew that was a lot of work
 */
 
-var cacheDB *redis.Client
-
-var uncachedStub string = "<?>"
-
-func InitCache() {
-	cacheDB = redis.NewClient(&redis.Options{
-		Addr:     "localhost:6421",
-		Password: os.Getenv("REDIS_6421_PASS"),
-		DB:       0,
-	})
-}
-
-func GenerateKey(objType, detailLevel, id, field string) string {
-	return objType + ":" + detailLevel + ":" + id + ":" + field
-}
-
-func ConstructRedweetID(authorID string, originalRedweetID string) string {
-	return "Redweet(" + authorID + ", " + originalRedweetID + ")"
-}
-
-// I realized this function is useless, so I'll replace it with a better one later that actually returns data on cache hit
-func CheckIfCached(objType, detailLevel, id string) (bool, error) {
-	var err error
-	if detailLevel == "full" {
-		if objType == "dweet" {
-			_, err = cacheDB.Get(common.BaseCtx, GenerateKey(objType, detailLevel, id, "id")).Result()
-		} else if objType == "user" {
-			_, err = cacheDB.Get(common.BaseCtx, GenerateKey(objType, detailLevel, id, "username")).Result()
-		} else if objType == "redweet" {
-			_, err = cacheDB.Get(common.BaseCtx, GenerateKey(objType, detailLevel, id, "author")).Result()
-		} else {
-			return false, errors.New("unknown objType")
-		}
-
-		if err == redis.Nil {
-			return false, nil
-		} else if err != nil {
-			return false, err
-		}
-	} else if detailLevel == "basic" {
-		if objType == "dweet" {
-			_, err = cacheDB.Get(common.BaseCtx, GenerateKey(objType, detailLevel, id, "id")).Result()
-		} else if objType == "user" {
-			_, err = cacheDB.Get(common.BaseCtx, GenerateKey(objType, detailLevel, id, "username")).Result()
-		} else {
-			return false, errors.New("unknown objType for detailLevel basic")
-		}
-
-		// If basic objects are not found, check their full counterparts
-		if err == redis.Nil {
-			if objType == "dweet" {
-				_, err = cacheDB.Get(common.BaseCtx, GenerateKey(objType, "full", id, "id")).Result()
-			} else {
-				_, err = cacheDB.Get(common.BaseCtx, GenerateKey(objType, "full", id, "username")).Result()
-			}
-
-			if err == redis.Nil {
-				return false, nil
-			} else if err != nil {
-				return false, err
-			}
-		} else if err != nil {
-			return false, err
-		}
-	} else {
-		return false, errors.New("unknown objType")
-	}
-
-	// No errors means we found the object
-	return true, nil
-}
+// TODO:
+// - Add "get from cache" function(s) for dweets and redweets (including detector for full cache hits, partial cache hits, and full cache misses)
+// - Add update cache functions for mutations
+// - Integrate with the rest of the API
 
 func CacheUser(detailLevel string, id string, obj *db.UserModel, objectsToFetch string, feedObjectsToFetch int, feedObjectsOffset int) error {
 	keyStem := GenerateKey("user", detailLevel, id, "")
@@ -281,16 +237,16 @@ func CacheUser(detailLevel string, id string, obj *db.UserModel, objectsToFetch 
 		keyStem + "email":          obj.Email,
 		keyStem + "bio":            obj.Bio,
 		keyStem + "pfpURL":         obj.ProfilePicURL,
-		keyStem + "followerCount":  obj.FollowerCount,
-		keyStem + "followingCount": obj.FollowingCount,
-		keyStem + "createdAt":      obj.CreatedAt,
+		keyStem + "followerCount":  strconv.Itoa(obj.FollowerCount),
+		keyStem + "followingCount": strconv.Itoa(obj.FollowingCount),
+		keyStem + "createdAt":      obj.CreatedAt.UTC().Format(util.TimeUTCFormat),
 	}
 	err := cacheDB.MSet(common.BaseCtx, userMap).Err()
 	if err != nil {
 		return err
 	}
 
-	expireTime := time.Now().UTC().Add(time.Hour * 1)
+	expireTime := time.Now().UTC().Add(time.Hour)
 	for key := range userMap {
 		err = cacheDB.PExpireAt(common.BaseCtx, key, expireTime).Err()
 		if err != nil {
@@ -384,10 +340,10 @@ func CacheUser(detailLevel string, id string, obj *db.UserModel, objectsToFetch 
 					}
 				} else if redweet, ok := obj.(db.RedweetModel); ok {
 					feedObjectIDList[i] = ConstructRedweetID(redweet.AuthorID, redweet.OriginalRedweetID)
-					// err := CacheRedweet("full", redweet.AuthorID, redweet.OriginalRedweetID)
-					// if err != nil {
-					// 	return err
-					// }
+					err := CacheRedweet("full", ConstructRedweetID(redweet.AuthorID, redweet.OriginalRedweetID), &redweet)
+					if err != nil {
+						return err
+					}
 				} else {
 					return errors.New("internal server error")
 				}
@@ -483,10 +439,10 @@ func CacheUser(detailLevel string, id string, obj *db.UserModel, objectsToFetch 
 
 			for i, redweet := range redweets {
 				redweetIDs[i] = ConstructRedweetID(redweet.AuthorID, redweet.OriginalRedweetID)
-				// err := CacheRedweet("full", redweet.AuthorID, redweet.OriginalRedweetID)
-				// if err != nil {
-				// 	return err
-				// }
+				err := CacheRedweet("full", ConstructRedweetID(redweet.AuthorID, redweet.OriginalRedweetID), &redweet)
+				if err != nil {
+					return err
+				}
 			}
 
 			err = cacheDB.LPush(common.BaseCtx, keyStem+"redweets", redweetIDs...).Err()
@@ -601,14 +557,6 @@ func CacheUser(detailLevel string, id string, obj *db.UserModel, objectsToFetch 
 			return errors.New("unknown objectsToFetch")
 		}
 
-		err = cacheDB.PExpireAt(common.BaseCtx, keyStem+"dweets", expireTime).Err()
-		if err != nil {
-			return err
-		}
-		err = cacheDB.PExpireAt(common.BaseCtx, keyStem+"redweets", expireTime).Err()
-		if err != nil {
-			return err
-		}
 		err = cacheDB.PExpireAt(common.BaseCtx, keyStem+"feedObjects", expireTime).Err()
 		if err != nil {
 			return err
@@ -617,7 +565,15 @@ func CacheUser(detailLevel string, id string, obj *db.UserModel, objectsToFetch 
 		if err != nil {
 			return err
 		}
-		err = cacheDB.PExpireAt(common.BaseCtx, keyStem+"dweets", expireTime).Err()
+		err = cacheDB.PExpireAt(common.BaseCtx, keyStem+"redweets", expireTime).Err()
+		if err != nil {
+			return err
+		}
+		err = cacheDB.PExpireAt(common.BaseCtx, keyStem+"redweetedDweets", expireTime).Err()
+		if err != nil {
+			return err
+		}
+		err = cacheDB.PExpireAt(common.BaseCtx, keyStem+"likedDweets", expireTime).Err()
 		if err != nil {
 			return err
 		}
@@ -759,7 +715,7 @@ func CacheDweet(detailLevel string, id string, obj *db.DweetModel, repliesToFetc
 	}
 }
 
-func CacheRedweet(detailLevel string, id string, obj *db.RedweetModel, repliesToFetch int, replyOffset int) error {
+func CacheRedweet(detailLevel string, id string, obj *db.RedweetModel) error {
 	if detailLevel == "full" {
 		keyStem := GenerateKey("redweet", detailLevel, ConstructRedweetID(obj.AuthorID, obj.OriginalRedweetID), "")
 		dweetMap := map[string]interface{}{

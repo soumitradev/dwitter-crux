@@ -35,8 +35,6 @@ type loginType struct {
 	Password string `json:"password"`
 }
 
-var timeUTCFormat string = "Mon, 2 Jan 2006 15:04:05 MST"
-
 func InitAuth() {
 	authDB = redis.NewClient(&redis.Options{
 		Addr:     "localhost:6420",
@@ -89,7 +87,7 @@ func generateSession(username string, password string) (SessionType, error) {
 		sessionMap := make(map[string]string)
 		sessionMap["username"] = session.Username
 		sessionMap["sid"] = session.Sid
-		sessionMap["expires"] = session.Expires.UTC().Format(timeUTCFormat)
+		sessionMap["expires"] = session.Expires.UTC().Format(util.TimeUTCFormat)
 
 		err = authDB.HSet(common.BaseCtx, sid, sessionMap).Err()
 		if err != nil {
@@ -118,7 +116,7 @@ func VerifySessionID(sessionID string) (SessionType, bool, error) {
 		var session SessionType
 		session.Username = res["username"]
 		session.Sid = res["sid"]
-		session.Expires, err = time.Parse(timeUTCFormat, res["expires"])
+		session.Expires, err = time.Parse(util.TimeUTCFormat, res["expires"])
 		if err != nil {
 			return SessionType{}, false, err
 		}
