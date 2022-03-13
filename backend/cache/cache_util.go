@@ -4,6 +4,7 @@ package cache
 import (
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/go-redis/redis/v8"
 )
@@ -32,6 +33,11 @@ func GenerateKey(objType, detailLevel, id, field string) string {
 
 func ConstructRedweetID(authorID string, originalRedweetID string) string {
 	return "Redweet(" + authorID + ", " + originalRedweetID + ")"
+}
+func ParseRedweetID(redweetID string) (authorID string, originalRedweetID string) {
+	noShell := redweetID[8 : len(redweetID)-1]
+	strings := strings.Split(noShell, ", ")
+	return strings[0], strings[1]
 }
 
 func isRedweet(id string) bool {

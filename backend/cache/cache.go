@@ -225,7 +225,6 @@ Whew that was a lot of work
 */
 
 // TODO:
-// - Add update cache functions for mutations
 // - Integrate with the rest of the API
 
 func CacheUser(detailLevel string, id string, obj *db.UserModel, objectsToFetch string, feedObjectsToFetch int, feedObjectsOffset int) error {
