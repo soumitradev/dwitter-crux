@@ -60,6 +60,44 @@ var queryHandler = graphql.NewObject(
 					return nil, errors.New("param \"id\" or missing")
 				},
 			},
+			"subscribeToDweet": &graphql.Field{
+				Type:        schema.DweetSchema,
+				Description: "Subscribe to dweet by id",
+				Args: graphql.FieldConfigArgument{
+					"id": &graphql.ArgumentConfig{
+						Type: graphql.NewNonNull(graphql.String),
+					},
+					"repliesToFetch": &graphql.ArgumentConfig{
+						Type:         graphql.Int,
+						DefaultValue: 0,
+					},
+					"repliesOffset": &graphql.ArgumentConfig{
+						Type:         graphql.Int,
+						DefaultValue: 0,
+					},
+				},
+				Resolve: func(params graphql.ResolveParams) (interface{}, error) {
+					cookieString := params.Info.RootValue.(map[string]interface{})["sid"].(string)
+					data, isAuth, err := auth.VerifySessionID(cookieString)
+					if err != nil {
+						return nil, err
+					}
+
+					if isAuth {
+						id, idPresent := params.Args["id"].(string)
+						numReplies, numPresent := params.Args["repliesToFetch"].(int)
+						replyOffset, offsetPresent := params.Args["repliesOffset"].(int)
+						if idPresent && numPresent && offsetPresent {
+							post, err := database.SubscribePost(id, numReplies, replyOffset, data.Username)
+							return post, err
+						}
+					} else {
+						return nil, errors.New("Unauthorized")
+					}
+
+					return nil, errors.New("param \"id\" or missing")
+				},
+			},
 			// TODO: Advanced search
 			"dweets": &graphql.Field{
 				Type:        graphql.NewList(schema.DweetSchema),
@@ -162,6 +200,49 @@ var queryHandler = graphql.NewObject(
 							user, err := database.GetUserUnauth(username, objectsToFetch, numFeedObjects, feedObjectsOffset)
 							return user, err
 						}
+					}
+
+					return nil, errors.New("param \"username\" missing")
+				},
+			},
+			"subscribeToUser": &graphql.Field{
+				Type:        schema.UserSchema,
+				Description: "Subscribe to user by username",
+				Args: graphql.FieldConfigArgument{
+					"username": &graphql.ArgumentConfig{
+						Type: graphql.NewNonNull(graphql.String),
+					},
+					"objectsToFetch": &graphql.ArgumentConfig{
+						Type:         graphql.String,
+						DefaultValue: "feed",
+					},
+					"feedObjectsToFetch": &graphql.ArgumentConfig{
+						Type:         graphql.Int,
+						DefaultValue: 0,
+					},
+					"feedObjectsOffset": &graphql.ArgumentConfig{
+						Type:         graphql.Int,
+						DefaultValue: 0,
+					},
+				},
+				Resolve: func(params graphql.ResolveParams) (interface{}, error) {
+					cookieString := params.Info.RootValue.(map[string]interface{})["sid"].(string)
+					data, isAuth, err := auth.VerifySessionID(cookieString)
+					if err != nil {
+						return nil, err
+					}
+
+					if isAuth {
+						username, userPresent := params.Args["username"].(string)
+						objectsToFetch, objectsToFetchPresent := params.Args["objectsToFetch"].(string)
+						numFeedObjects, numPresent := params.Args["feedObjectsToFetch"].(int)
+						feedObjectsOffset, feedObjectsOffsetPresent := params.Args["feedObjectsOffset"].(int)
+						if userPresent && objectsToFetchPresent && numPresent && feedObjectsOffsetPresent {
+							user, err := database.SubscribeToUser(username, objectsToFetch, numFeedObjects, feedObjectsOffset, data.Username)
+							return user, err
+						}
+					} else {
+						return nil, errors.New("Unauthorized")
 					}
 
 					return nil, errors.New("param \"username\" missing")

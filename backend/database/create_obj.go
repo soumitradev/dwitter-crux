@@ -10,6 +10,7 @@ import (
 	"github.com/soumitradev/Dwitter/backend/common"
 	"github.com/soumitradev/Dwitter/backend/prisma/db"
 	"github.com/soumitradev/Dwitter/backend/schema"
+	"github.com/soumitradev/Dwitter/backend/subscriptions"
 	"github.com/soumitradev/Dwitter/backend/util"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -167,6 +168,8 @@ func NewDweet(body, username string, mediaLinks []string) (schema.DweetType, err
 		delete(common.MediaCreatedButNotUsed, link)
 	}
 
+	subscriptions.NotifyUserSubscribersDweet("newDweet", *createdPost, createdPost.Author().Subscribers)
+
 	// Format and return
 	post := schema.FormatAsDweetType(createdPost, []db.UserModel{}, []db.UserModel{})
 	return post, err
@@ -248,7 +251,7 @@ func NewReply(originalPostID string, body string, authorUsername string, mediaLi
 	}
 
 	// Update original Dweet to show reply
-	_, err = common.Client.Dweet.FindUnique(
+	replied, err := common.Client.Dweet.FindUnique(
 		db.Dweet.ID.Equals(originalPostID),
 	).Update(
 		db.Dweet.ReplyDweets.Link(
@@ -262,6 +265,10 @@ func NewReply(originalPostID string, body string, authorUsername string, mediaLi
 	if err != nil {
 		return schema.DweetType{}, fmt.Errorf("internal server error: %v", err)
 	}
+
+	subscriptions.NotifyDweetSubscribers("editDweet", *replied, replied.Subscribers)
+
+	subscriptions.NotifyUserSubscribersDweet("newDweet", *createdReply, createdReply.Author().Subscribers)
 
 	post := schema.FormatAsDweetType(createdReply, []db.UserModel{}, []db.UserModel{})
 	return post, err
@@ -342,6 +349,8 @@ func Redweet(originalPostID, username string) (schema.RedweetType, error) {
 	if err != nil {
 		return schema.RedweetType{}, fmt.Errorf("internal server error: %v", err)
 	}
+
+	subscriptions.NotifyUserSubscribersRedweet("newDweet", *createdRedweet, createdRedweet.Author().Subscribers)
 
 	return schema.FormatAsRedweetType(createdRedweet), err
 }
