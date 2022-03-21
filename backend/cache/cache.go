@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/soumitradev/Dwitter/backend/common"
 	"github.com/soumitradev/Dwitter/backend/prisma/db"
 	"github.com/soumitradev/Dwitter/backend/util"
@@ -319,6 +320,8 @@ func CacheUser(detailLevel string, id string, obj *db.UserModel, objectsToFetch 
 				if err != nil {
 					return err
 				}
+			} else {
+				feedObjectsOffset = 0
 			}
 
 			merged := util.MergeDweetRedweetList(obj.Dweets(), obj.Redweets())
@@ -762,4 +765,56 @@ func CacheRedweet(detailLevel string, id string, obj *db.RedweetModel) error {
 	} else {
 		return errors.New("unknown detailLevel")
 	}
+}
+
+// The return of the "useless" function
+func CheckIfCached(objType, detailLevel, id string) (bool, error) {
+	var err error
+	if detailLevel == "full" {
+		if objType == "dweet" {
+			_, err = cacheDB.Get(common.BaseCtx, GenerateKey(objType, detailLevel, id, "id")).Result()
+		} else if objType == "user" {
+			_, err = cacheDB.Get(common.BaseCtx, GenerateKey(objType, detailLevel, id, "username")).Result()
+		} else if objType == "redweet" {
+			_, err = cacheDB.Get(common.BaseCtx, GenerateKey(objType, detailLevel, id, "author")).Result()
+		} else {
+			return false, errors.New("unknown objType")
+		}
+
+		if err == redis.Nil {
+			return false, nil
+		} else if err != nil {
+			return false, err
+		}
+	} else if detailLevel == "basic" {
+		if objType == "dweet" {
+			_, err = cacheDB.Get(common.BaseCtx, GenerateKey(objType, detailLevel, id, "id")).Result()
+		} else if objType == "user" {
+			_, err = cacheDB.Get(common.BaseCtx, GenerateKey(objType, detailLevel, id, "username")).Result()
+		} else {
+			return false, errors.New("unknown objType for detailLevel basic")
+		}
+
+		// If basic objects are not found, check their full counterparts
+		if err == redis.Nil {
+			if objType == "dweet" {
+				_, err = cacheDB.Get(common.BaseCtx, GenerateKey(objType, "full", id, "id")).Result()
+			} else {
+				_, err = cacheDB.Get(common.BaseCtx, GenerateKey(objType, "full", id, "username")).Result()
+			}
+
+			if err == redis.Nil {
+				return false, nil
+			} else if err != nil {
+				return false, err
+			}
+		} else if err != nil {
+			return false, err
+		}
+	} else {
+		return false, errors.New("unknown objType")
+	}
+
+	// No errors means we found the object
+	return true, nil
 }

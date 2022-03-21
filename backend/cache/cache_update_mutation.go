@@ -118,8 +118,6 @@ If the dweet is a reply to a dweet then the dweet replied to is UPDATEd
 // *grabs the current reply list, throws those 5 replies when needed (when encountering a stub) and caches them*
 // Similarly for users
 
-// TODO: If full object is updated on one of the fields that is also part of the basic one, update the basic version too, and vice versa
-
 func CreateDweetCacheUpdate(dweet db.DweetModel) error {
 	// Check if author is cached in full, if yes, cache basic version of dweet and add it to user object
 	keyStem := GenerateKey("user", "full", dweet.AuthorID, "")
@@ -568,7 +566,7 @@ func FollowCacheUpdate(userThatWasFollowed db.UserModel, userThatFollowed db.Use
 			return err
 		}
 	} else {
-		err = CacheUser("full", userThatWasFollowed.Username, &userThatWasFollowed, objectsToFetch, feedObjectsToFetch, feedObjectOffset)
+		err = UpsertUser(userThatWasFollowed.Username, &userThatWasFollowed, objectsToFetch, feedObjectsToFetch, feedObjectOffset)
 		if err != nil {
 			return err
 		}
@@ -912,7 +910,7 @@ func UnfollowCacheUpdate(userThatWasFollowed db.UserModel, userThatFollowed db.U
 			return err
 		}
 	} else {
-		err = CacheUser("full", userThatWasFollowed.Username, &userThatWasFollowed, objectsToFetch, feedObjectsToFetch, feedObjectOffset)
+		err = UpsertUser(userThatWasFollowed.Username, &userThatWasFollowed, objectsToFetch, feedObjectsToFetch, feedObjectOffset)
 		if err != nil {
 			return err
 		}
@@ -967,7 +965,7 @@ func EditDweetCacheUpdate(dweet db.DweetModel, repliesToFetch int, repliesOffset
 
 func EditUserCacheUpdate(user db.UserModel, objectsToFetch string, feedObjectsToFetch int, feedObjectsOffset int) error {
 	// Check if author is cached in full, if yes, cache basic version of dweet and add it to user object
-	err := CacheUser("full", user.Username, &user, objectsToFetch, feedObjectsToFetch, feedObjectsOffset)
+	err := UpsertUser(user.Username, &user, objectsToFetch, feedObjectsToFetch, feedObjectsOffset)
 	if err != nil {
 		return err
 	}
@@ -996,6 +994,7 @@ func EditUserCacheUpdate(user db.UserModel, objectsToFetch string, feedObjectsTo
 	return nil
 }
 
+// NOTE: THIS FUNCTION IS ONLY CALLED IF THE DWEET WAS LIKED ALREADY
 func unlikeCacheUpdateInternal(dweetID string, usernameThatLiked string) error {
 
 	userInFull := true
@@ -1073,6 +1072,7 @@ func unlikeCacheUpdateInternal(dweetID string, usernameThatLiked string) error {
 	return nil
 }
 
+// NOTE: THIS FUNCTION IS ONLY CALLED IF THE DWEET WAS REDWEETED ALREADY
 func unredweetCacheUpdateInternal(redweetID string, usernameThatUnredweeted string) error {
 	// Check if user that unredweeted is cached in full
 	// If yes, remove redweet ID from feedObjects and redweets fields
