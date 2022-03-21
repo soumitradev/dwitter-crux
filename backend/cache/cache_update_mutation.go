@@ -429,7 +429,7 @@ func LikeCacheUpdate(dweet db.DweetModel, userThatLiked db.UserModel, repliesToF
 			return err
 		}
 	} else {
-		err = CacheDweet("full", dweet.ID, &dweet, repliesToFetch, repliesOffset)
+		err = UpsertDweet(dweet.ID, &dweet, repliesToFetch, repliesOffset)
 		if err != nil {
 			return err
 		}
@@ -664,7 +664,7 @@ func UnlikeCacheUpdate(dweet db.DweetModel, userThatLiked db.UserModel, repliesT
 			return err
 		}
 	} else {
-		err = CacheDweet("full", dweet.ID, &dweet, repliesToFetch, repliesOffset)
+		err = UpsertDweet(dweet.ID, &dweet, repliesToFetch, repliesOffset)
 		if err != nil {
 			return err
 		}
@@ -934,7 +934,7 @@ func UnfollowCacheUpdate(userThatWasFollowed db.UserModel, userThatFollowed db.U
 
 func EditDweetCacheUpdate(dweet db.DweetModel, repliesToFetch int, repliesOffset int) error {
 	// Check if author is cached in full, if yes, cache basic version of dweet and add it to user object
-	err := CacheDweet("full", dweet.ID, &dweet, repliesToFetch, repliesOffset)
+	err := UpsertDweet(dweet.ID, &dweet, repliesToFetch, repliesOffset)
 	if err != nil {
 		return err
 	}

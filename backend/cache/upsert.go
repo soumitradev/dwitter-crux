@@ -1077,3 +1077,224 @@ func UpsertUser(userID string, obj *db.UserModel, objectsToFetch string, feedObj
 	}
 	return nil
 }
+
+func UpsertDweet(dweetID string, obj *db.DweetModel, repliesToFetch int, replyOffset int) error {
+	isCached, err := CheckIfCached("dweet", "full", dweetID)
+	if err != nil {
+		return err
+	}
+	if !isCached {
+		err := CacheDweet("full", dweetID, obj, repliesToFetch, replyOffset)
+		if err != nil {
+			return err
+		}
+	}
+
+	keyStem := GenerateKey("dweet", "full", dweetID, "")
+	if repliesToFetch < 0 {
+		replies := obj.ReplyDweets()
+		iterLen := util.Min(repliesToFetch, len(replies))
+		replyIDList := make([]interface{}, iterLen)
+
+		for i, reply := range replies {
+			replyIDList[i] = reply.ID
+			err := CacheDweet("basic", reply.ID, &reply, 0, 0)
+			if err != nil {
+				return err
+			}
+		}
+
+		err = cacheDB.Del(common.BaseCtx, keyStem+"replyDweets").Err()
+		if err != nil {
+			return err
+		}
+		err = cacheDB.LPush(common.BaseCtx, keyStem+"replyDweets", replyIDList...).Err()
+		if err != nil {
+			return err
+		}
+	} else {
+		cachedArr, err := cacheDB.LRange(common.BaseCtx, keyStem+"replyDweets", 0, -1).Result()
+		if err != nil {
+			return err
+		}
+
+		cachedList := list.New()
+		for _, id := range cachedArr {
+			cachedList.PushBack(id)
+		}
+
+		var cursor *list.Element = cachedList.Front()
+
+		originalRepliesToFetch := repliesToFetch
+		for repliesToFetch != 0 && cursor.Next() != nil {
+			if IsStub(cursor.Value.(string)) {
+				jump, err := ParseStub(cursor.Value.(string))
+				if err != nil {
+					return err
+				}
+				if jump == -1 {
+					// Insert your data after a stub of <feedObjectOffset>
+					replies := obj.ReplyDweets()
+					iterLen := len(replies)
+					replyIDList := make([]interface{}, iterLen)
+
+					for i, reply := range replies {
+						replyIDList[i] = reply.ID
+						err := CacheDweet("basic", reply.ID, &reply, 0, 0)
+						if err != nil {
+							return err
+						}
+					}
+
+					stubPtr := cursor
+					if iterLen < originalRepliesToFetch {
+						cachedList.Remove(stubPtr)
+					}
+
+					cursor = cursor.Prev()
+
+					if replyOffset > 0 {
+						cursor = cachedList.InsertAfter("<"+fmt.Sprintf("%d", replyOffset)+">", cursor)
+					}
+
+					for _, v := range replyIDList {
+						cursor = cachedList.InsertAfter(v, cursor)
+					}
+
+					processedArr := make([]interface{}, cachedList.Len())
+					cursor = cachedList.Front()
+					processedIter := 0
+					for cursor != nil {
+						processedArr[processedIter] = *cursor
+						cursor = cursor.Next()
+						processedIter++
+					}
+					err = cacheDB.Del(common.BaseCtx, keyStem+"replyDweets").Err()
+					if err != nil {
+						return err
+					}
+					err = cacheDB.LPush(common.BaseCtx, keyStem+"replyDweets", processedArr...).Err()
+					if err != nil {
+						return err
+					}
+
+					return nil
+				} else {
+					replyOffset -= jump
+				}
+			} else {
+				replyOffset--
+			}
+			cursor = cursor.Next()
+		}
+
+		for repliesToFetch != 0 && cursor.Next() != nil {
+			if IsStub(cursor.Value.(string)) {
+				jump, err := ParseStub(cursor.Value.(string))
+				if err != nil {
+					return err
+				}
+				if jump == -1 {
+					// Insert rest of data
+					replies := obj.ReplyDweets()
+					iterLen := originalRepliesToFetch - repliesToFetch
+					replyList := make([]interface{}, iterLen)
+					replyIDList := make([]interface{}, iterLen)
+					for i := 0; i < iterLen; i++ {
+						replyList[i] = replies[i+iterLen]
+					}
+
+					for i, obj := range replyList {
+						if reply, ok := obj.(db.DweetModel); ok {
+							replyIDList[i] = reply.ID
+							err := CacheDweet("basic", reply.ID, &reply, 0, 0)
+							if err != nil {
+								return err
+							}
+						}
+					}
+
+					stubPtr := cursor
+
+					for revIter := originalRepliesToFetch; revIter > (originalRepliesToFetch - repliesToFetch); revIter-- {
+						cursor = cachedList.InsertBefore(replyIDList[revIter], cursor)
+					}
+
+					if len(replyIDList) < originalRepliesToFetch {
+						cachedList.Remove(stubPtr)
+					}
+
+					processedArr := make([]interface{}, cachedList.Len())
+					cursor = cachedList.Front()
+					processedIter := 0
+					for cursor != nil {
+						processedArr[processedIter] = *cursor
+						cursor = cursor.Next()
+						processedIter++
+					}
+					err = cacheDB.Del(common.BaseCtx, keyStem+"replyDweets").Err()
+					if err != nil {
+						return err
+					}
+					err = cacheDB.LPush(common.BaseCtx, keyStem+"replyDweets", processedArr...).Err()
+					if err != nil {
+						return err
+					}
+
+					return nil
+				} else {
+					sliceStart := originalRepliesToFetch - replyOffset
+
+					replies := obj.ReplyDweets()
+					replyList := make([]interface{}, jump)
+					replyIDList := make([]interface{}, jump)
+					for i := 0; i < jump; i++ {
+						replyList[i] = replies[i+sliceStart]
+					}
+
+					for i, obj := range replyList {
+						if reply, ok := obj.(db.DweetModel); ok {
+							replyIDList[i] = reply.ID
+							err := CacheDweet("basic", reply.ID, &reply, 0, 0)
+							if err != nil {
+								return err
+							}
+						} else {
+							return errors.New("internal server error")
+						}
+					}
+
+					stubPtr := cursor
+
+					for _, id := range replyIDList {
+						cursor = cachedList.InsertAfter(id, cursor)
+					}
+
+					cachedList.Remove(stubPtr)
+					repliesToFetch -= jump
+				}
+			} else {
+				repliesToFetch--
+			}
+			cursor = cursor.Next()
+		}
+
+		processedArr := make([]interface{}, cachedList.Len())
+		cursor = cachedList.Front()
+		processedIter := 0
+		for cursor != nil {
+			processedArr[processedIter] = *cursor
+			cursor = cursor.Next()
+			processedIter++
+		}
+		err = cacheDB.Del(common.BaseCtx, keyStem+"replyDweets").Err()
+		if err != nil {
+			return err
+		}
+		err = cacheDB.LPush(common.BaseCtx, keyStem+"replyDweets", processedArr...).Err()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
