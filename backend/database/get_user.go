@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/go-redis/redis/v8"
+	"github.com/soumitradev/Dwitter/backend/cache"
 	"github.com/soumitradev/Dwitter/backend/common"
 	"github.com/soumitradev/Dwitter/backend/prisma/db"
 	"github.com/soumitradev/Dwitter/backend/schema"
@@ -312,8 +314,6 @@ func GetUser(username string, objectsToFetch string, feedObjectsToFetch int, fee
 	}
 
 	var user *db.UserModel
-	var alsoFollowedBy []db.UserModel
-	var alsoFollowing []db.UserModel
 	var feedObjectList []interface{}
 
 	// Get your own following-list
@@ -331,132 +331,57 @@ func GetUser(username string, objectsToFetch string, feedObjectsToFetch int, fee
 		return schema.UserType{}, fmt.Errorf("internal server error: %v", err)
 	}
 
-	if feedObjectsToFetch < 0 {
-		switch objectsToFetch {
-		case "feed":
-			user, err = common.Client.User.FindUnique(
-				db.User.Username.Equals(username),
-			).With(
-				db.User.Dweets.Fetch().With(
-					db.Dweet.Author.Fetch(),
-				).OrderBy(
-					db.Dweet.PostedAt.Order(db.DESC),
-				),
-				db.User.Redweets.Fetch().With(
-					db.Redweet.Author.Fetch(),
-					db.Redweet.RedweetOf.Fetch().With(
-						db.Dweet.Author.Fetch(),
-					),
-				).OrderBy(
-					db.Redweet.RedweetTime.Order(db.DESC),
-				),
-				db.User.Followers.Fetch().OrderBy(
-					db.User.FollowerCount.Order(db.DESC),
-				),
-				db.User.Following.Fetch().OrderBy(
-					db.User.FollowerCount.Order(db.DESC),
-				),
-			).Exec(common.BaseCtx)
-			if err == db.ErrNotFound {
-				return schema.UserType{}, fmt.Errorf("user not found: %v", err)
-			}
-			if err != nil {
-				return schema.UserType{}, fmt.Errorf("internal server error: %v", err)
-			}
+	isCached := true
+	cachedObj, err := cache.GetCachedUserFull(username, objectsToFetch, feedObjectsToFetch, feedObjectsOffset)
+	if err != nil {
+		if err == redis.Nil {
+			isCached = false
+		}
+		return schema.UserType{}, fmt.Errorf("internal server error: %v", err)
+	}
 
-			merged := util.MergeDweetRedweetList(user.Dweets(), user.Redweets())
-
-			feedObjectList = append(feedObjectList, merged...)
-		case "dweet":
-			user, err = common.Client.User.FindUnique(
-				db.User.Username.Equals(username),
-			).With(
-				db.User.Dweets.Fetch().With(
-					db.Dweet.Author.Fetch(),
-				).OrderBy(
-					db.Dweet.PostedAt.Order(db.DESC),
-				),
-				db.User.Followers.Fetch().OrderBy(
-					db.User.FollowerCount.Order(db.DESC),
-				),
-				db.User.Following.Fetch().OrderBy(
-					db.User.FollowerCount.Order(db.DESC),
-				),
-			).Exec(common.BaseCtx)
-			if err == db.ErrNotFound {
-				return schema.UserType{}, fmt.Errorf("user not found: %v", err)
-			}
-			if err != nil {
-				return schema.UserType{}, fmt.Errorf("internal server error: %v", err)
-			}
-
-			dweets := user.Dweets()
-			for i := 0; i < len(dweets); i++ {
-				feedObjectList = append(feedObjectList, dweets[i])
-			}
-		case "redweet":
-			user, err = common.Client.User.FindUnique(
-				db.User.Username.Equals(username),
-			).With(
-				db.User.Redweets.Fetch().With(
-					db.Redweet.Author.Fetch(),
-					db.Redweet.RedweetOf.Fetch().With(
-						db.Dweet.Author.Fetch(),
-					),
-				).OrderBy(
-					db.Redweet.RedweetTime.Order(db.DESC),
-				),
-				db.User.Followers.Fetch().OrderBy(
-					db.User.FollowerCount.Order(db.DESC),
-				),
-				db.User.Following.Fetch().OrderBy(
-					db.User.FollowerCount.Order(db.DESC),
-				),
-			).Exec(common.BaseCtx)
-			if err == db.ErrNotFound {
-				return schema.UserType{}, fmt.Errorf("user not found: %v", err)
-			}
-			if err != nil {
-				return schema.UserType{}, fmt.Errorf("internal server error: %v", err)
-			}
-
-			redweets := user.Redweets()
-			for i := 0; i < len(redweets); i++ {
-				feedObjectList = append(feedObjectList, redweets[i])
-			}
-		case "redweetedDweet":
-			user, err = common.Client.User.FindUnique(
-				db.User.Username.Equals(username),
-			).With(
-				db.User.RedweetedDweets.Fetch().With(
-					db.Dweet.Author.Fetch(),
-				).OrderBy(
-					db.Dweet.PostedAt.Order(db.DESC),
-				),
-				db.User.Followers.Fetch().OrderBy(
-					db.User.FollowerCount.Order(db.DESC),
-				),
-				db.User.Following.Fetch().OrderBy(
-					db.User.FollowerCount.Order(db.DESC),
-				),
-			).Exec(common.BaseCtx)
-			if err == db.ErrNotFound {
-				return schema.UserType{}, fmt.Errorf("user not found: %v", err)
-			}
-			if err != nil {
-				return schema.UserType{}, fmt.Errorf("internal server error: %v", err)
-			}
-
-			redweetedDweets := user.RedweetedDweets()
-			for i := 0; i < len(redweetedDweets); i++ {
-				feedObjectList = append(feedObjectList, redweetedDweets[i])
-			}
-		case "liked":
-			if viewerUsername == username {
+	if !isCached {
+		if feedObjectsToFetch < 0 {
+			switch objectsToFetch {
+			case "feed":
 				user, err = common.Client.User.FindUnique(
 					db.User.Username.Equals(username),
 				).With(
-					db.User.LikedDweets.Fetch().With(
+					db.User.Dweets.Fetch().With(
+						db.Dweet.Author.Fetch(),
+					).OrderBy(
+						db.Dweet.PostedAt.Order(db.DESC),
+					),
+					db.User.Redweets.Fetch().With(
+						db.Redweet.Author.Fetch(),
+						db.Redweet.RedweetOf.Fetch().With(
+							db.Dweet.Author.Fetch(),
+						),
+					).OrderBy(
+						db.Redweet.RedweetTime.Order(db.DESC),
+					),
+					db.User.Followers.Fetch().OrderBy(
+						db.User.FollowerCount.Order(db.DESC),
+					),
+					db.User.Following.Fetch().OrderBy(
+						db.User.FollowerCount.Order(db.DESC),
+					),
+				).Exec(common.BaseCtx)
+				if err == db.ErrNotFound {
+					return schema.UserType{}, fmt.Errorf("user not found: %v", err)
+				}
+				if err != nil {
+					return schema.UserType{}, fmt.Errorf("internal server error: %v", err)
+				}
+
+				merged := util.MergeDweetRedweetList(user.Dweets(), user.Redweets())
+
+				feedObjectList = append(feedObjectList, merged...)
+			case "dweet":
+				user, err = common.Client.User.FindUnique(
+					db.User.Username.Equals(username),
+				).With(
+					db.User.Dweets.Fetch().With(
 						db.Dweet.Author.Fetch(),
 					).OrderBy(
 						db.Dweet.PostedAt.Order(db.DESC),
@@ -475,144 +400,144 @@ func GetUser(username string, objectsToFetch string, feedObjectsToFetch int, fee
 					return schema.UserType{}, fmt.Errorf("internal server error: %v", err)
 				}
 
-				likes := user.LikedDweets()
-				for i := 0; i < len(likes); i++ {
-					feedObjectList = append(feedObjectList, likes[i])
+				dweets := user.Dweets()
+				for i := 0; i < len(dweets); i++ {
+					feedObjectList = append(feedObjectList, dweets[i])
 				}
-			} else {
-				return schema.UserType{}, errors.New("unauthorized")
-			}
-		default:
-			break
-		}
-	} else {
-		switch objectsToFetch {
-		case "feed":
-			user, err = common.Client.User.FindUnique(
-				db.User.Username.Equals(username),
-			).With(
-				db.User.Dweets.Fetch().With(
-					db.Dweet.Author.Fetch(),
-				).OrderBy(
-					db.Dweet.PostedAt.Order(db.DESC),
-				).Take(feedObjectsToFetch+feedObjectsOffset),
-				db.User.Redweets.Fetch().With(
-					db.Redweet.Author.Fetch(),
-					db.Redweet.RedweetOf.Fetch().With(
-						db.Dweet.Author.Fetch(),
-					),
-				).OrderBy(
-					db.Redweet.RedweetTime.Order(db.DESC),
-				).Take(feedObjectsToFetch+feedObjectsOffset),
-				db.User.Followers.Fetch().OrderBy(
-					db.User.FollowerCount.Order(db.DESC),
-				),
-				db.User.Following.Fetch().OrderBy(
-					db.User.FollowerCount.Order(db.DESC),
-				),
-			).Exec(common.BaseCtx)
-			if err == db.ErrNotFound {
-				return schema.UserType{}, fmt.Errorf("user not found: %v", err)
-			}
-			if err != nil {
-				return schema.UserType{}, fmt.Errorf("internal server error: %v", err)
-			}
-
-			merged := util.MergeDweetRedweetList(user.Dweets(), user.Redweets())
-
-			for i := 0; i < util.Min(feedObjectsToFetch, len(merged)); i++ {
-				feedObjectList = append(feedObjectList, merged[i+feedObjectsOffset])
-			}
-		case "dweet":
-			user, err = common.Client.User.FindUnique(
-				db.User.Username.Equals(username),
-			).With(
-				db.User.Dweets.Fetch().With(
-					db.Dweet.Author.Fetch(),
-				).OrderBy(
-					db.Dweet.PostedAt.Order(db.DESC),
-				).Skip(feedObjectsOffset).Take(feedObjectsToFetch),
-				db.User.Followers.Fetch().OrderBy(
-					db.User.FollowerCount.Order(db.DESC),
-				),
-				db.User.Following.Fetch().OrderBy(
-					db.User.FollowerCount.Order(db.DESC),
-				),
-			).Exec(common.BaseCtx)
-			if err == db.ErrNotFound {
-				return schema.UserType{}, fmt.Errorf("user not found: %v", err)
-			}
-			if err != nil {
-				return schema.UserType{}, fmt.Errorf("internal server error: %v", err)
-			}
-
-			dweets := user.Dweets()
-			for i := 0; i < len(dweets); i++ {
-				feedObjectList = append(feedObjectList, dweets[i])
-			}
-		case "redweet":
-			user, err = common.Client.User.FindUnique(
-				db.User.Username.Equals(username),
-			).With(
-				db.User.Redweets.Fetch().With(
-					db.Redweet.Author.Fetch(),
-					db.Redweet.RedweetOf.Fetch().With(
-						db.Dweet.Author.Fetch(),
-					),
-				).OrderBy(
-					db.Redweet.RedweetTime.Order(db.DESC),
-				).Skip(feedObjectsOffset).Take(feedObjectsToFetch),
-				db.User.Followers.Fetch().OrderBy(
-					db.User.FollowerCount.Order(db.DESC),
-				),
-				db.User.Following.Fetch().OrderBy(
-					db.User.FollowerCount.Order(db.DESC),
-				),
-			).Exec(common.BaseCtx)
-			if err == db.ErrNotFound {
-				return schema.UserType{}, fmt.Errorf("user not found: %v", err)
-			}
-			if err != nil {
-				return schema.UserType{}, fmt.Errorf("internal server error: %v", err)
-			}
-
-			redweets := user.Redweets()
-			for i := 0; i < len(redweets); i++ {
-				feedObjectList = append(feedObjectList, redweets[i])
-			}
-		case "redweetedDweet":
-			user, err = common.Client.User.FindUnique(
-				db.User.Username.Equals(username),
-			).With(
-				db.User.RedweetedDweets.Fetch().With(
-					db.Dweet.Author.Fetch(),
-				).OrderBy(
-					db.Dweet.PostedAt.Order(db.DESC),
-				).Skip(feedObjectsOffset).Take(feedObjectsToFetch),
-				db.User.Followers.Fetch().OrderBy(
-					db.User.FollowerCount.Order(db.DESC),
-				),
-				db.User.Following.Fetch().OrderBy(
-					db.User.FollowerCount.Order(db.DESC),
-				),
-			).Exec(common.BaseCtx)
-			if err == db.ErrNotFound {
-				return schema.UserType{}, fmt.Errorf("user not found: %v", err)
-			}
-			if err != nil {
-				return schema.UserType{}, fmt.Errorf("internal server error: %v", err)
-			}
-
-			redweetedDweets := user.RedweetedDweets()
-			for i := 0; i < len(redweetedDweets); i++ {
-				feedObjectList = append(feedObjectList, redweetedDweets[i])
-			}
-		case "liked":
-			if viewerUsername == username {
+			case "redweet":
 				user, err = common.Client.User.FindUnique(
 					db.User.Username.Equals(username),
 				).With(
-					db.User.LikedDweets.Fetch().With(
+					db.User.Redweets.Fetch().With(
+						db.Redweet.Author.Fetch(),
+						db.Redweet.RedweetOf.Fetch().With(
+							db.Dweet.Author.Fetch(),
+						),
+					).OrderBy(
+						db.Redweet.RedweetTime.Order(db.DESC),
+					),
+					db.User.Followers.Fetch().OrderBy(
+						db.User.FollowerCount.Order(db.DESC),
+					),
+					db.User.Following.Fetch().OrderBy(
+						db.User.FollowerCount.Order(db.DESC),
+					),
+				).Exec(common.BaseCtx)
+				if err == db.ErrNotFound {
+					return schema.UserType{}, fmt.Errorf("user not found: %v", err)
+				}
+				if err != nil {
+					return schema.UserType{}, fmt.Errorf("internal server error: %v", err)
+				}
+
+				redweets := user.Redweets()
+				for i := 0; i < len(redweets); i++ {
+					feedObjectList = append(feedObjectList, redweets[i])
+				}
+			case "redweetedDweet":
+				user, err = common.Client.User.FindUnique(
+					db.User.Username.Equals(username),
+				).With(
+					db.User.RedweetedDweets.Fetch().With(
+						db.Dweet.Author.Fetch(),
+					).OrderBy(
+						db.Dweet.PostedAt.Order(db.DESC),
+					),
+					db.User.Followers.Fetch().OrderBy(
+						db.User.FollowerCount.Order(db.DESC),
+					),
+					db.User.Following.Fetch().OrderBy(
+						db.User.FollowerCount.Order(db.DESC),
+					),
+				).Exec(common.BaseCtx)
+				if err == db.ErrNotFound {
+					return schema.UserType{}, fmt.Errorf("user not found: %v", err)
+				}
+				if err != nil {
+					return schema.UserType{}, fmt.Errorf("internal server error: %v", err)
+				}
+
+				redweetedDweets := user.RedweetedDweets()
+				for i := 0; i < len(redweetedDweets); i++ {
+					feedObjectList = append(feedObjectList, redweetedDweets[i])
+				}
+			case "liked":
+				if viewerUsername == username {
+					user, err = common.Client.User.FindUnique(
+						db.User.Username.Equals(username),
+					).With(
+						db.User.LikedDweets.Fetch().With(
+							db.Dweet.Author.Fetch(),
+						).OrderBy(
+							db.Dweet.PostedAt.Order(db.DESC),
+						),
+						db.User.Followers.Fetch().OrderBy(
+							db.User.FollowerCount.Order(db.DESC),
+						),
+						db.User.Following.Fetch().OrderBy(
+							db.User.FollowerCount.Order(db.DESC),
+						),
+					).Exec(common.BaseCtx)
+					if err == db.ErrNotFound {
+						return schema.UserType{}, fmt.Errorf("user not found: %v", err)
+					}
+					if err != nil {
+						return schema.UserType{}, fmt.Errorf("internal server error: %v", err)
+					}
+
+					likes := user.LikedDweets()
+					for i := 0; i < len(likes); i++ {
+						feedObjectList = append(feedObjectList, likes[i])
+					}
+				} else {
+					return schema.UserType{}, errors.New("unauthorized")
+				}
+			default:
+				break
+			}
+		} else {
+			switch objectsToFetch {
+			case "feed":
+				user, err = common.Client.User.FindUnique(
+					db.User.Username.Equals(username),
+				).With(
+					db.User.Dweets.Fetch().With(
+						db.Dweet.Author.Fetch(),
+					).OrderBy(
+						db.Dweet.PostedAt.Order(db.DESC),
+					).Take(feedObjectsToFetch+feedObjectsOffset),
+					db.User.Redweets.Fetch().With(
+						db.Redweet.Author.Fetch(),
+						db.Redweet.RedweetOf.Fetch().With(
+							db.Dweet.Author.Fetch(),
+						),
+					).OrderBy(
+						db.Redweet.RedweetTime.Order(db.DESC),
+					).Take(feedObjectsToFetch+feedObjectsOffset),
+					db.User.Followers.Fetch().OrderBy(
+						db.User.FollowerCount.Order(db.DESC),
+					),
+					db.User.Following.Fetch().OrderBy(
+						db.User.FollowerCount.Order(db.DESC),
+					),
+				).Exec(common.BaseCtx)
+				if err == db.ErrNotFound {
+					return schema.UserType{}, fmt.Errorf("user not found: %v", err)
+				}
+				if err != nil {
+					return schema.UserType{}, fmt.Errorf("internal server error: %v", err)
+				}
+
+				merged := util.MergeDweetRedweetList(user.Dweets(), user.Redweets())
+
+				for i := 0; i < util.Min(feedObjectsToFetch, len(merged)); i++ {
+					feedObjectList = append(feedObjectList, merged[i+feedObjectsOffset])
+				}
+			case "dweet":
+				user, err = common.Client.User.FindUnique(
+					db.User.Username.Equals(username),
+				).With(
+					db.User.Dweets.Fetch().With(
 						db.Dweet.Author.Fetch(),
 					).OrderBy(
 						db.Dweet.PostedAt.Order(db.DESC),
@@ -631,38 +556,148 @@ func GetUser(username string, objectsToFetch string, feedObjectsToFetch int, fee
 					return schema.UserType{}, fmt.Errorf("internal server error: %v", err)
 				}
 
-				likes := user.LikedDweets()
-				for i := 0; i < len(likes); i++ {
-					feedObjectList = append(feedObjectList, likes[i])
+				dweets := user.Dweets()
+				for i := 0; i < len(dweets); i++ {
+					feedObjectList = append(feedObjectList, dweets[i])
 				}
-			} else {
-				return schema.UserType{}, errors.New("unauthorized")
+			case "redweet":
+				user, err = common.Client.User.FindUnique(
+					db.User.Username.Equals(username),
+				).With(
+					db.User.Redweets.Fetch().With(
+						db.Redweet.Author.Fetch(),
+						db.Redweet.RedweetOf.Fetch().With(
+							db.Dweet.Author.Fetch(),
+						),
+					).OrderBy(
+						db.Redweet.RedweetTime.Order(db.DESC),
+					).Skip(feedObjectsOffset).Take(feedObjectsToFetch),
+					db.User.Followers.Fetch().OrderBy(
+						db.User.FollowerCount.Order(db.DESC),
+					),
+					db.User.Following.Fetch().OrderBy(
+						db.User.FollowerCount.Order(db.DESC),
+					),
+				).Exec(common.BaseCtx)
+				if err == db.ErrNotFound {
+					return schema.UserType{}, fmt.Errorf("user not found: %v", err)
+				}
+				if err != nil {
+					return schema.UserType{}, fmt.Errorf("internal server error: %v", err)
+				}
+
+				redweets := user.Redweets()
+				for i := 0; i < len(redweets); i++ {
+					feedObjectList = append(feedObjectList, redweets[i])
+				}
+			case "redweetedDweet":
+				user, err = common.Client.User.FindUnique(
+					db.User.Username.Equals(username),
+				).With(
+					db.User.RedweetedDweets.Fetch().With(
+						db.Dweet.Author.Fetch(),
+					).OrderBy(
+						db.Dweet.PostedAt.Order(db.DESC),
+					).Skip(feedObjectsOffset).Take(feedObjectsToFetch),
+					db.User.Followers.Fetch().OrderBy(
+						db.User.FollowerCount.Order(db.DESC),
+					),
+					db.User.Following.Fetch().OrderBy(
+						db.User.FollowerCount.Order(db.DESC),
+					),
+				).Exec(common.BaseCtx)
+				if err == db.ErrNotFound {
+					return schema.UserType{}, fmt.Errorf("user not found: %v", err)
+				}
+				if err != nil {
+					return schema.UserType{}, fmt.Errorf("internal server error: %v", err)
+				}
+
+				redweetedDweets := user.RedweetedDweets()
+				for i := 0; i < len(redweetedDweets); i++ {
+					feedObjectList = append(feedObjectList, redweetedDweets[i])
+				}
+			case "liked":
+				if viewerUsername == username {
+					user, err = common.Client.User.FindUnique(
+						db.User.Username.Equals(username),
+					).With(
+						db.User.LikedDweets.Fetch().With(
+							db.Dweet.Author.Fetch(),
+						).OrderBy(
+							db.Dweet.PostedAt.Order(db.DESC),
+						).Skip(feedObjectsOffset).Take(feedObjectsToFetch),
+						db.User.Followers.Fetch().OrderBy(
+							db.User.FollowerCount.Order(db.DESC),
+						),
+						db.User.Following.Fetch().OrderBy(
+							db.User.FollowerCount.Order(db.DESC),
+						),
+					).Exec(common.BaseCtx)
+					if err == db.ErrNotFound {
+						return schema.UserType{}, fmt.Errorf("user not found: %v", err)
+					}
+					if err != nil {
+						return schema.UserType{}, fmt.Errorf("internal server error: %v", err)
+					}
+
+					likes := user.LikedDweets()
+					for i := 0; i < len(likes); i++ {
+						feedObjectList = append(feedObjectList, likes[i])
+					}
+				} else {
+					return schema.UserType{}, errors.New("unauthorized")
+				}
+			default:
+				break
 			}
-		default:
-			break
+		}
+
+		var showEmail bool
+		var alsoFollowedBy []db.UserModel
+		var alsoFollowing []db.UserModel
+
+		if viewerUsername == username {
+			alsoFollowedBy = user.Followers()
+			alsoFollowing = user.Following()
+			showEmail = true
+		} else {
+			usersFollowed := append(viewUser.Following(), *viewUser)
+
+			// Get mutuals
+			followers := user.Followers()
+			following := user.Following()
+			showEmail = false
+
+			alsoFollowedBy = util.HashIntersectUsers(followers, usersFollowed)
+			alsoFollowing = util.HashIntersectUsers(following, usersFollowed)
+		}
+
+		// Send back the user requested, along with mutuals in the followers field
+		nuser, err := schema.FormatAsUserType(user, alsoFollowedBy, alsoFollowing, objectsToFetch, feedObjectList, showEmail)
+		return nuser, err
+	} else {
+		if viewerUsername == username {
+			return cachedObj, nil
+		} else {
+			followingDB := viewUser.Following()
+			followingSchema := make([]schema.BasicUserType, len(followingDB)+1)
+			for i, user := range followingDB {
+				followingSchema[i] = schema.FormatAsBasicUserType(&user)
+			}
+			followingSchema[len(followingDB)] = schema.FormatAsBasicUserType(viewUser)
+
+			// Get mutuals
+			followers := cachedObj.Followers
+			following := cachedObj.Following
+			cachedObj.Email = ""
+
+			cachedObj.Followers = util.HashIntersectUserSchema(followers, followingSchema)
+			cachedObj.Following = util.HashIntersectUserSchema(following, followingSchema)
+
+			return cachedObj, nil
 		}
 	}
-	var showEmail bool
-
-	if viewerUsername == username {
-		alsoFollowedBy = user.Followers()
-		alsoFollowing = user.Following()
-		showEmail = true
-	} else {
-		usersFollowed := append(viewUser.Following(), *viewUser)
-
-		// Get mutuals
-		followers := user.Followers()
-		following := user.Following()
-		showEmail = false
-
-		alsoFollowedBy = util.HashIntersectUsers(followers, usersFollowed)
-		alsoFollowing = util.HashIntersectUsers(following, usersFollowed)
-	}
-
-	// Send back the user requested, along with mutuals in the followers field
-	nuser, err := schema.FormatAsUserType(user, alsoFollowedBy, alsoFollowing, objectsToFetch, feedObjectList, showEmail)
-	return nuser, err
 }
 
 // Get user when authenticated

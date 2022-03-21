@@ -9,6 +9,7 @@ import (
 	"reflect"
 
 	"github.com/soumitradev/Dwitter/backend/prisma/db"
+	"github.com/soumitradev/Dwitter/backend/schema"
 )
 
 const AlphanumBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -68,6 +69,32 @@ func HashIntersectUsers(a []db.UserModel, b []db.UserModel) []db.UserModel {
 		elt := el.(db.UserModel).Username
 		if _, found := hash[elt]; found {
 			set = append(set, el.(db.UserModel))
+		}
+	}
+
+	return set
+}
+
+// Hash function to find intersection of two slices
+// with modifications from: https://github.com/juliangruber/go-intersect/blob/2e99d8c0a75f6975a52f7efeb81926a19b221214/intersect.go#L42-L62
+// Hash has complexity: O(n * x) where x is a factor of hash function efficiency (between 1 and 2)
+func HashIntersectUserSchema(a []schema.BasicUserType, b []schema.BasicUserType) []schema.BasicUserType {
+	set := make([]schema.BasicUserType, 0)
+	hash := make(map[string]bool)
+	av := reflect.ValueOf(a)
+	bv := reflect.ValueOf(b)
+
+	for i := 0; i < av.Len(); i++ {
+		el := av.Index(i).Interface()
+		elt := el.(schema.BasicUserType).Username
+		hash[elt] = true
+	}
+
+	for i := 0; i < bv.Len(); i++ {
+		el := bv.Index(i).Interface()
+		elt := el.(schema.BasicUserType).Username
+		if _, found := hash[elt]; found {
+			set = append(set, el.(schema.BasicUserType))
 		}
 	}
 

@@ -3,6 +3,8 @@ package database
 import (
 	"fmt"
 
+	"github.com/go-redis/redis/v8"
+	"github.com/soumitradev/Dwitter/backend/cache"
 	"github.com/soumitradev/Dwitter/backend/common"
 	"github.com/soumitradev/Dwitter/backend/prisma/db"
 	"github.com/soumitradev/Dwitter/backend/schema"
@@ -96,92 +98,144 @@ func GetPost(postID string, repliesToFetch int, replyOffset int, viewerUsername 
 
 	following := viewUser.Following()
 
-	var post *db.DweetModel
-
-	// Check params and return data accordingly
-	if repliesToFetch < 0 {
-		post, err = common.Client.Dweet.FindUnique(
-			db.Dweet.ID.Equals(postID),
-		).With(
-			db.Dweet.Author.Fetch(),
-			db.Dweet.ReplyDweets.Fetch().With(
-				db.Dweet.Author.Fetch(),
-			).OrderBy(
-				db.Dweet.LikeCount.Order(db.DESC),
-			),
-			db.Dweet.ReplyTo.Fetch().With(
-				db.Dweet.Author.Fetch(),
-			),
-			db.Dweet.LikeUsers.Fetch().OrderBy(
-				db.User.FollowerCount.Order(db.DESC),
-			),
-			db.Dweet.RedweetUsers.Fetch().OrderBy(
-				db.User.FollowerCount.Order(db.DESC),
-			),
-		).Exec(common.BaseCtx)
-	} else {
-		post, err = common.Client.Dweet.FindUnique(
-			db.Dweet.ID.Equals(postID),
-		).With(
-			db.Dweet.Author.Fetch(),
-			db.Dweet.ReplyDweets.Fetch().With(
-				db.Dweet.Author.Fetch(),
-			).OrderBy(
-				db.Dweet.LikeCount.Order(db.DESC),
-			).Take(repliesToFetch).Skip(replyOffset),
-			db.Dweet.ReplyTo.Fetch().With(
-				db.Dweet.Author.Fetch(),
-			),
-			db.Dweet.LikeUsers.Fetch().OrderBy(
-				db.User.FollowerCount.Order(db.DESC),
-			),
-			db.Dweet.RedweetUsers.Fetch().OrderBy(
-				db.User.FollowerCount.Order(db.DESC),
-			),
-		).Exec(common.BaseCtx)
-	}
-	if err == db.ErrNotFound {
-		return schema.DweetType{}, fmt.Errorf("dweet not found: %v", err)
-	}
+	isCached := true
+	cachedObj, err := cache.GetCachedDweetFull(postID, repliesToFetch, replyOffset)
 	if err != nil {
+		if err == redis.Nil {
+			isCached = false
+		}
 		return schema.DweetType{}, fmt.Errorf("internal server error: %v", err)
 	}
 
-	// If the dweet is liked by requesting user, include the requesting user in the like_users list
-	likes := post.LikeUsers()
-	selfLike := false
-	for _, user := range likes {
-		if user.Username == viewerUsername {
-			selfLike = true
+	var post *db.DweetModel
+
+	if !isCached {
+		// Check params and return data accordingly
+		if repliesToFetch < 0 {
+			post, err = common.Client.Dweet.FindUnique(
+				db.Dweet.ID.Equals(postID),
+			).With(
+				db.Dweet.Author.Fetch(),
+				db.Dweet.ReplyDweets.Fetch().With(
+					db.Dweet.Author.Fetch(),
+				).OrderBy(
+					db.Dweet.LikeCount.Order(db.DESC),
+				),
+				db.Dweet.ReplyTo.Fetch().With(
+					db.Dweet.Author.Fetch(),
+				),
+				db.Dweet.LikeUsers.Fetch().OrderBy(
+					db.User.FollowerCount.Order(db.DESC),
+				),
+				db.Dweet.RedweetUsers.Fetch().OrderBy(
+					db.User.FollowerCount.Order(db.DESC),
+				),
+			).Exec(common.BaseCtx)
+		} else {
+			post, err = common.Client.Dweet.FindUnique(
+				db.Dweet.ID.Equals(postID),
+			).With(
+				db.Dweet.Author.Fetch(),
+				db.Dweet.ReplyDweets.Fetch().With(
+					db.Dweet.Author.Fetch(),
+				).OrderBy(
+					db.Dweet.LikeCount.Order(db.DESC),
+				).Take(repliesToFetch).Skip(replyOffset),
+				db.Dweet.ReplyTo.Fetch().With(
+					db.Dweet.Author.Fetch(),
+				),
+				db.Dweet.LikeUsers.Fetch().OrderBy(
+					db.User.FollowerCount.Order(db.DESC),
+				),
+				db.Dweet.RedweetUsers.Fetch().OrderBy(
+					db.User.FollowerCount.Order(db.DESC),
+				),
+			).Exec(common.BaseCtx)
 		}
-	}
-	// Find known people that liked the dweet
-	mutualLikes := util.HashIntersectUsers(likes, following)
-
-	// Add requesting user to like_users list
-	if selfLike {
-		mutualLikes = append(mutualLikes, *viewUser)
-	}
-
-	// If the dweet is redweeted by requesting user, include the requesting user in the redweet_users list
-	redweetUsers := post.RedweetUsers()
-	selfRedweet := false
-	for _, user := range redweetUsers {
-		if user.Username == viewerUsername {
-			selfRedweet = true
+		if err == db.ErrNotFound {
+			return schema.DweetType{}, fmt.Errorf("dweet not found: %v", err)
 		}
-	}
-	// Find known people that redweeted the dweet
-	mutualRedweets := util.HashIntersectUsers(redweetUsers, following)
+		if err != nil {
+			return schema.DweetType{}, fmt.Errorf("internal server error: %v", err)
+		}
 
-	// Add requesting user to redweet_users list
-	if selfRedweet {
-		mutualRedweets = append(mutualRedweets, *viewUser)
-	}
+		// If the dweet is liked by requesting user, include the requesting user in the like_users list
+		likes := post.LikeUsers()
+		selfLike := false
+		for _, user := range likes {
+			if user.Username == viewerUsername {
+				selfLike = true
+			}
+		}
+		// Find known people that liked the dweet
+		mutualLikes := util.HashIntersectUsers(likes, following)
 
-	// Send back the dweet requested, along with like_users
-	npost := schema.FormatAsDweetType(post, mutualLikes, mutualRedweets)
-	return npost, err
+		// Add requesting user to like_users list
+		if selfLike {
+			mutualLikes = append(mutualLikes, *viewUser)
+		}
+
+		// If the dweet is redweeted by requesting user, include the requesting user in the redweet_users list
+		redweetUsers := post.RedweetUsers()
+		selfRedweet := false
+		for _, user := range redweetUsers {
+			if user.Username == viewerUsername {
+				selfRedweet = true
+			}
+		}
+		// Find known people that redweeted the dweet
+		mutualRedweets := util.HashIntersectUsers(redweetUsers, following)
+
+		// Add requesting user to redweet_users list
+		if selfRedweet {
+			mutualRedweets = append(mutualRedweets, *viewUser)
+		}
+
+		// Send back the dweet requested, along with like_users
+		npost := schema.FormatAsDweetType(post, mutualLikes, mutualRedweets)
+		return npost, err
+
+	} else {
+		// If the dweet is liked by requesting user, include the requesting user in the like_users list
+		likes := cachedObj.LikeUsers
+		selfLike := false
+		for _, user := range likes {
+			if user.Username == viewerUsername {
+				selfLike = true
+			}
+		}
+		// Find known people that liked the dweet
+		followingSchema := make([]schema.BasicUserType, len(following))
+		for i, user := range following {
+			followingSchema[i] = schema.FormatAsBasicUserType(&user)
+		}
+		mutualLikes := util.HashIntersectUserSchema(likes, followingSchema)
+
+		// Add requesting user to like_users list
+		if selfLike {
+			mutualLikes = append(mutualLikes, schema.FormatAsBasicUserType(viewUser))
+		}
+
+		// If the dweet is redweeted by requesting user, include the requesting user in the redweet_users list
+		redweetUsers := cachedObj.RedweetUsers
+		selfRedweet := false
+		for _, user := range redweetUsers {
+			if user.Username == viewerUsername {
+				selfRedweet = true
+			}
+		}
+		// Find known people that redweeted the dweet
+		mutualRedweets := util.HashIntersectUserSchema(redweetUsers, followingSchema)
+
+		// Add requesting user to redweet_users list
+		if selfRedweet {
+			mutualRedweets = append(mutualRedweets, schema.FormatAsBasicUserType(viewUser))
+		}
+		cachedObj.LikeUsers = mutualLikes
+		cachedObj.RedweetUsers = mutualRedweets
+
+		return cachedObj, nil
+	}
 }
 
 // Get dweet when authenticated

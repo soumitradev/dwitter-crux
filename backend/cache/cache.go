@@ -226,7 +226,7 @@ Whew that was a lot of work
 */
 
 // TODO:
-// - Integrate with the rest of the API
+// - Finish cache integration of list-objects
 
 func CacheUser(detailLevel string, id string, obj *db.UserModel, objectsToFetch string, feedObjectsToFetch int, feedObjectsOffset int) error {
 	keyStem := GenerateKey("user", detailLevel, id, "")
