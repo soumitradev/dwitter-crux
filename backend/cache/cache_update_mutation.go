@@ -1189,28 +1189,9 @@ func unredweetCacheUpdateInternal(redweetID string, usernameThatUnredweeted stri
 // If the user that posted the dweet is cached in full detail, their feedObjects and dweets fields are UPDATEd
 // If the dweet is a reply to a dweet then the dweet replied to is UPDATEd
 func DeleteDweetCacheUpdate(dweetID string) error {
-	// TODO: Dweet being a reply is missing
-	keyStem := GenerateKey("dweet", "full", dweetID, "")
-	dweetMap := []string{
-		keyStem + "dweetBody",
-		keyStem + "id",
-		keyStem + "author",
-		keyStem + "authorID",
-		keyStem + "postedAt",
-		keyStem + "lastUpdatedAt",
-		keyStem + "likeCount",
-		keyStem + "isReply",
-		keyStem + "originalReplyID",
-		keyStem + "replyCount",
-		keyStem + "redweetCount",
-		keyStem + "media",
-		keyStem + "replyTo",
-	}
-	err := cacheDB.Del(common.BaseCtx, dweetMap...).Err()
-	if err != nil {
-		return err
-	}
+	expireTime := time.Now().UTC().Add(time.Hour)
 
+	keyStem := GenerateKey("dweet", "full", dweetID, "")
 	replyIDs, err := cacheDB.LRange(common.BaseCtx, keyStem+"replyDweets", 0, -1).Result()
 	if err != nil {
 		return err
@@ -1236,6 +1217,66 @@ func DeleteDweetCacheUpdate(dweetID string) error {
 	}
 
 	keyStem = GenerateKey("dweet", "basic", dweetID, "")
+	dweetMap := []string{
+		keyStem + "dweetBody",
+		keyStem + "id",
+		keyStem + "author",
+		keyStem + "authorID",
+		keyStem + "postedAt",
+		keyStem + "lastUpdatedAt",
+		keyStem + "likeCount",
+		keyStem + "isReply",
+		keyStem + "originalReplyID",
+		keyStem + "replyCount",
+		keyStem + "redweetCount",
+		keyStem + "media",
+	}
+	err = cacheDB.Del(common.BaseCtx, dweetMap...).Err()
+	if err != nil {
+		return err
+	}
+
+	isReply := true
+	keyStem = GenerateKey("dweet", "full", dweetID, "")
+	replyID, err := cacheDB.Get(common.BaseCtx, keyStem+"replyTo").Result()
+	if err != nil {
+		// If dweet isnt cached in full,
+		if err == redis.Nil {
+			isReply = false
+		}
+		return err
+	}
+	if isReply {
+		keyStem = GenerateKey("dweet", "full", replyID, "")
+		// If user is already in cache, we dont need to cache it
+		removed, err := cacheDB.LRem(common.BaseCtx, keyStem+"replyDweets", 1, dweetID).Result()
+		if err != nil {
+			return err
+		}
+		if removed != 0 {
+			err = cacheDB.Decr(common.BaseCtx, keyStem+"replyCount").Err()
+			if err != nil {
+				return err
+			}
+		}
+		err = ExpireDweetAt("full", replyID, expireTime)
+		if err != nil {
+			return err
+		}
+
+		keyStem = GenerateKey("dweet", "basic", replyID, "")
+		// If user is already in cache, we dont need to cache it
+		err = cacheDB.Decr(common.BaseCtx, keyStem+"replyCount").Err()
+		if err != nil {
+			return err
+		}
+		err = ExpireDweetAt("basic", replyID, expireTime)
+		if err != nil {
+			return err
+		}
+	}
+
+	keyStem = GenerateKey("dweet", "full", dweetID, "")
 	dweetMap = []string{
 		keyStem + "dweetBody",
 		keyStem + "id",
@@ -1249,6 +1290,7 @@ func DeleteDweetCacheUpdate(dweetID string) error {
 		keyStem + "replyCount",
 		keyStem + "redweetCount",
 		keyStem + "media",
+		keyStem + "replyTo",
 	}
 	err = cacheDB.Del(common.BaseCtx, dweetMap...).Err()
 	if err != nil {
