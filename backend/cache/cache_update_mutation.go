@@ -118,6 +118,8 @@ If the dweet is a reply to a dweet then the dweet replied to is UPDATEd
 // *grabs the current reply list, throws those 5 replies when needed (when encountering a stub) and caches them*
 // Similarly for users
 
+// TODO: If full object is updated on one of the fields that is also part of the basic one, update the basic version too, and vice versa
+
 func CreateDweetCacheUpdate(dweet db.DweetModel) error {
 	// Check if author is cached in full, if yes, cache basic version of dweet and add it to user object
 	keyStem := GenerateKey("user", "full", dweet.AuthorID, "")
@@ -232,11 +234,13 @@ func CreateReplyCacheUpdate(dweet db.DweetModel) error {
 	return nil
 }
 
+// NOTE: THIS FUNCTION IS ONLY CALLED IF THE DWEET WASNT REDWEETED ALREADY
 func RedweetCacheUpdate(redweet db.RedweetModel) error {
 	// Check if author is cached in full, if yes, cache basic version of dweet and add it to user object
 	// Check if dweet redweeted is cached in full, if yes, cache basic version of redweet author and add it to redweetUsers field object
 	userCached := true
-	dweetCached := true
+	dweetCachedFull := true
+	dweetCachedBasic := true
 
 	keyStem := GenerateKey("user", "full", redweet.AuthorID, "")
 	err := cacheDB.Get(common.BaseCtx, keyStem+"username").Err()
@@ -253,7 +257,17 @@ func RedweetCacheUpdate(redweet db.RedweetModel) error {
 	if err != nil {
 		// If dweet isnt cached in full,
 		if err == redis.Nil {
-			dweetCached = false
+			dweetCachedFull = false
+		}
+		return err
+	}
+
+	keyStem = GenerateKey("dweet", "basic", redweet.OriginalRedweetID, "")
+	err = cacheDB.Get(common.BaseCtx, keyStem+"id").Err()
+	if err != nil {
+		// If dweet isnt cached in full,
+		if err == redis.Nil {
+			dweetCachedBasic = false
 		}
 		return err
 	}
@@ -290,7 +304,7 @@ func RedweetCacheUpdate(redweet db.RedweetModel) error {
 		}
 	}
 
-	if dweetCached {
+	if dweetCachedFull {
 		keyStem := GenerateKey("dweet", "full", redweet.OriginalRedweetID, "")
 		// If user is already in cache, we dont need to cache it
 		if !userCached {
@@ -299,19 +313,27 @@ func RedweetCacheUpdate(redweet db.RedweetModel) error {
 				return err
 			}
 		}
-		removed, err := cacheDB.LRem(common.BaseCtx, keyStem+"redweetUsers", 1, redweet.AuthorID).Result()
-		if err != nil {
-			return err
-		}
 		err = cacheDB.LPush(common.BaseCtx, keyStem+"redweetUsers", redweet.AuthorID).Err()
 		if err != nil {
 			return err
 		}
-		if removed == 0 {
-			err = cacheDB.Incr(common.BaseCtx, keyStem+"redweetCount").Err()
-			if err != nil {
-				return err
-			}
+		err = cacheDB.Incr(common.BaseCtx, keyStem+"redweetCount").Err()
+		if err != nil {
+			return err
+		}
+
+		err = ExpireRedweetAt(redweetID, expireTime)
+		if err != nil {
+			return err
+		}
+	}
+
+	if dweetCachedBasic {
+		keyStem := GenerateKey("dweet", "basic", redweet.OriginalRedweetID, "")
+		// If user is already in cache, we dont need to cache it
+		err = cacheDB.Incr(common.BaseCtx, keyStem+"redweetCount").Err()
+		if err != nil {
+			return err
 		}
 
 		err = ExpireRedweetAt(redweetID, expireTime)
@@ -323,6 +345,7 @@ func RedweetCacheUpdate(redweet db.RedweetModel) error {
 	return nil
 }
 
+// NOTE: THIS FUNCTION IS ONLY CALLED IF THE DWEET WASNT LIKED ALREADY
 func LikeCacheUpdate(dweet db.DweetModel, userThatLiked db.UserModel, repliesToFetch int, repliesOffset int) error {
 	// Check if user that liked is cached in full
 	// If yes, add dweet ID to likedDweets
@@ -333,6 +356,7 @@ func LikeCacheUpdate(dweet db.DweetModel, userThatLiked db.UserModel, repliesToF
 
 	userInFull := true
 	dweetInFull := true
+	dweetInBasic := true
 
 	keyStem := GenerateKey("user", "full", userThatLiked.Username, "")
 	err := cacheDB.Get(common.BaseCtx, keyStem+"username").Err()
@@ -350,6 +374,16 @@ func LikeCacheUpdate(dweet db.DweetModel, userThatLiked db.UserModel, repliesToF
 		// If dweet isnt cached in full,
 		if err == redis.Nil {
 			dweetInFull = false
+		}
+		return err
+	}
+
+	keyStem = GenerateKey("dweet", "basic", dweet.ID, "")
+	err = cacheDB.Get(common.BaseCtx, keyStem+"id").Err()
+	if err != nil {
+		// If dweet isnt cached in full,
+		if err == redis.Nil {
+			dweetInBasic = false
 		}
 		return err
 	}
@@ -403,9 +437,24 @@ func LikeCacheUpdate(dweet db.DweetModel, userThatLiked db.UserModel, repliesToF
 		}
 	}
 
+	if dweetInBasic {
+		keyStem := GenerateKey("dweet", "basic", dweet.ID, "")
+		// Some version of the user is already cached
+		err = cacheDB.Incr(common.BaseCtx, keyStem+"likeCount").Err()
+		if err != nil {
+			return err
+		}
+
+		err = ExpireDweetAt("basic", dweet.ID, expireTime)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
+// NOTE: THIS FUNCTION IS ONLY CALLED IF THE USER WASNT FOLLOWING ALREADY
 func FollowCacheUpdate(userThatWasFollowed db.UserModel, userThatFollowed db.UserModel, objectsToFetch string, feedObjectsToFetch int, feedObjectOffset int) error {
 	// Check if user that followed is cached in full
 	// If yes, add followed username to following
@@ -415,7 +464,9 @@ func FollowCacheUpdate(userThatWasFollowed db.UserModel, userThatFollowed db.Use
 	// If not, cache a full version of the followed user
 
 	userFollowingInFull := true
+	userFollowingInBasic := true
 	userFollowedInFull := true
+	userFollowedInBasic := true
 
 	keyStem := GenerateKey("user", "full", userThatFollowed.Username, "")
 	err := cacheDB.Get(common.BaseCtx, keyStem+"username").Err()
@@ -427,12 +478,32 @@ func FollowCacheUpdate(userThatWasFollowed db.UserModel, userThatFollowed db.Use
 		return err
 	}
 
-	keyStem = GenerateKey("dweet", "full", userThatWasFollowed.Username, "")
-	err = cacheDB.Get(common.BaseCtx, keyStem+"id").Err()
+	keyStem = GenerateKey("user", "basic", userThatFollowed.Username, "")
+	err = cacheDB.Get(common.BaseCtx, keyStem+"username").Err()
 	if err != nil {
-		// If dweet isnt cached in full,
+		// If user isnt cached in full,
+		if err == redis.Nil {
+			userFollowingInBasic = false
+		}
+		return err
+	}
+
+	keyStem = GenerateKey("user", "full", userThatWasFollowed.Username, "")
+	err = cacheDB.Get(common.BaseCtx, keyStem+"username").Err()
+	if err != nil {
+		// If user isnt cached in full,
 		if err == redis.Nil {
 			userFollowedInFull = false
+		}
+		return err
+	}
+
+	keyStem = GenerateKey("user", "basic", userThatWasFollowed.Username, "")
+	err = cacheDB.Get(common.BaseCtx, keyStem+"username").Err()
+	if err != nil {
+		// If user isnt cached in full,
+		if err == redis.Nil {
+			userFollowedInBasic = false
 		}
 		return err
 	}
@@ -441,19 +512,13 @@ func FollowCacheUpdate(userThatWasFollowed db.UserModel, userThatFollowed db.Use
 
 	if userFollowingInFull {
 		keyStem := GenerateKey("user", "full", userThatFollowed.Username, "")
-		removed, err := cacheDB.LRem(common.BaseCtx, keyStem+"following", 1, userThatWasFollowed.Username).Result()
-		if err != nil {
-			return err
-		}
 		err = cacheDB.LPush(common.BaseCtx, keyStem+"following", userThatWasFollowed.Username).Err()
 		if err != nil {
 			return err
 		}
-		if removed == 0 {
-			err = cacheDB.Incr(common.BaseCtx, keyStem+"followingCount").Err()
-			if err != nil {
-				return err
-			}
+		err = cacheDB.Incr(common.BaseCtx, keyStem+"followingCount").Err()
+		if err != nil {
+			return err
 		}
 
 		err = ExpireUserAt("full", userThatFollowed.Username, expireTime)
@@ -467,8 +532,21 @@ func FollowCacheUpdate(userThatWasFollowed db.UserModel, userThatFollowed db.Use
 		}
 	}
 
+	if userFollowingInBasic {
+		keyStem := GenerateKey("user", "basic", userThatFollowed.Username, "")
+		err = cacheDB.Incr(common.BaseCtx, keyStem+"followingCount").Err()
+		if err != nil {
+			return err
+		}
+
+		err = ExpireUserAt("basic", userThatFollowed.Username, expireTime)
+		if err != nil {
+			return err
+		}
+	}
+
 	if userFollowedInFull {
-		keyStem := GenerateKey("dweet", "full", userThatWasFollowed.Username, "")
+		keyStem := GenerateKey("user", "full", userThatWasFollowed.Username, "")
 		// Some version of the user is already cached
 		removed, err := cacheDB.LRem(common.BaseCtx, keyStem+"followers", 1, userThatFollowed.Username).Result()
 		if err != nil {
@@ -496,9 +574,24 @@ func FollowCacheUpdate(userThatWasFollowed db.UserModel, userThatFollowed db.Use
 		}
 	}
 
+	if userFollowedInBasic {
+		keyStem := GenerateKey("user", "basic", userThatWasFollowed.Username, "")
+		// Some version of the user is already cached
+		err = cacheDB.Incr(common.BaseCtx, keyStem+"followerCount").Err()
+		if err != nil {
+			return err
+		}
+
+		err = ExpireUserAt("basic", userThatWasFollowed.Username, expireTime)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
+// NOTE: THIS FUNCTION IS ONLY CALLED IF THE DWEET WAS LIKED ALREADY
 func UnlikeCacheUpdate(dweet db.DweetModel, userThatLiked db.UserModel, repliesToFetch int, repliesOffset int) error {
 	// Check if user that unliked is cached in full
 	// If yes, remove dweet ID from likedDweets
@@ -508,6 +601,7 @@ func UnlikeCacheUpdate(dweet db.DweetModel, userThatLiked db.UserModel, repliesT
 
 	userInFull := true
 	dweetInFull := true
+	dweetInBasic := true
 
 	keyStem := GenerateKey("user", "full", userThatLiked.Username, "")
 	err := cacheDB.Get(common.BaseCtx, keyStem+"username").Err()
@@ -525,6 +619,16 @@ func UnlikeCacheUpdate(dweet db.DweetModel, userThatLiked db.UserModel, repliesT
 		// If dweet isnt cached in full,
 		if err == redis.Nil {
 			dweetInFull = false
+		}
+		return err
+	}
+
+	keyStem = GenerateKey("dweet", "basic", dweet.ID, "")
+	err = cacheDB.Get(common.BaseCtx, keyStem+"id").Err()
+	if err != nil {
+		// If dweet isnt cached in full,
+		if err == redis.Nil {
+			dweetInBasic = false
 		}
 		return err
 	}
@@ -568,9 +672,24 @@ func UnlikeCacheUpdate(dweet db.DweetModel, userThatLiked db.UserModel, repliesT
 		}
 	}
 
+	if dweetInBasic {
+		keyStem := GenerateKey("dweet", "basic", dweet.ID, "")
+		// Some version of the user is already cached
+		err = cacheDB.Decr(common.BaseCtx, keyStem+"likeCount").Err()
+		if err != nil {
+			return err
+		}
+
+		err = ExpireDweetAt("full", dweet.ID, expireTime)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
+// NOTE: THIS FUNCTION IS ONLY CALLED IF THE DWEET WAS REDWEETED ALREADY
 func UnredweetCacheUpdate(redweet db.RedweetModel, userThatUnredweeted db.UserModel) error {
 	// Check if user that unredweeted is cached in full
 	// If yes, remove redweet ID from feedObjects and redweets fields
@@ -578,7 +697,8 @@ func UnredweetCacheUpdate(redweet db.RedweetModel, userThatUnredweeted db.UserMo
 	// UPSERT the redweeted dweet
 
 	userInFull := true
-	dweetCached := true
+	dweetInFull := true
+	dweetInBasic := true
 
 	keyStem := GenerateKey("user", "full", userThatUnredweeted.Username, "")
 	err := cacheDB.Get(common.BaseCtx, keyStem+"username").Err()
@@ -595,7 +715,17 @@ func UnredweetCacheUpdate(redweet db.RedweetModel, userThatUnredweeted db.UserMo
 	if err != nil {
 		// If dweet isnt cached in full,
 		if err == redis.Nil {
-			dweetCached = false
+			dweetInFull = false
+		}
+		return err
+	}
+
+	keyStem = GenerateKey("dweet", "basic", redweet.OriginalRedweetID, "")
+	err = cacheDB.Get(common.BaseCtx, keyStem+"id").Err()
+	if err != nil {
+		// If dweet isnt cached in full,
+		if err == redis.Nil {
+			dweetInBasic = false
 		}
 		return err
 	}
@@ -619,7 +749,7 @@ func UnredweetCacheUpdate(redweet db.RedweetModel, userThatUnredweeted db.UserMo
 		}
 	}
 
-	if dweetCached {
+	if dweetInFull {
 		keyStem := GenerateKey("dweet", "full", redweet.OriginalRedweetID, "")
 		// If user is already in cache, we dont need to cache it
 
@@ -632,6 +762,20 @@ func UnredweetCacheUpdate(redweet db.RedweetModel, userThatUnredweeted db.UserMo
 			if err != nil {
 				return err
 			}
+		}
+
+		err = ExpireRedweetAt(redweetID, expireTime)
+		if err != nil {
+			return err
+		}
+	}
+
+	if dweetInBasic {
+		keyStem := GenerateKey("dweet", "basic", redweet.OriginalRedweetID, "")
+		// If user is already in cache, we dont need to cache it
+		err = cacheDB.Decr(common.BaseCtx, keyStem+"redweetCount").Err()
+		if err != nil {
+			return err
 		}
 
 		err = ExpireRedweetAt(redweetID, expireTime)
@@ -657,6 +801,7 @@ func UnredweetCacheUpdate(redweet db.RedweetModel, userThatUnredweeted db.UserMo
 	return nil
 }
 
+// NOTE: THIS FUNCTION IS ONLY CALLED IF THE USER WAS FOLLOWED ALREADY
 func UnfollowCacheUpdate(userThatWasFollowed db.UserModel, userThatFollowed db.UserModel, objectsToFetch string, feedObjectsToFetch int, feedObjectOffset int) error {
 	// Check if user that unfollowed is cached in full
 	// If yes, remove user that was unfollowed ID from following
@@ -665,7 +810,9 @@ func UnfollowCacheUpdate(userThatWasFollowed db.UserModel, userThatFollowed db.U
 	// If not, cache a full version of the user unfollowed
 
 	userFollowingInFull := true
+	userFollowingInBasic := true
 	userFollowedInFull := true
+	userFollowedInBasic := true
 
 	keyStem := GenerateKey("user", "full", userThatFollowed.Username, "")
 	err := cacheDB.Get(common.BaseCtx, keyStem+"username").Err()
@@ -677,12 +824,32 @@ func UnfollowCacheUpdate(userThatWasFollowed db.UserModel, userThatFollowed db.U
 		return err
 	}
 
-	keyStem = GenerateKey("dweet", "full", userThatWasFollowed.Username, "")
-	err = cacheDB.Get(common.BaseCtx, keyStem+"id").Err()
+	keyStem = GenerateKey("user", "basic", userThatFollowed.Username, "")
+	err = cacheDB.Get(common.BaseCtx, keyStem+"username").Err()
+	if err != nil {
+		// If user isnt cached in full,
+		if err == redis.Nil {
+			userFollowingInBasic = false
+		}
+		return err
+	}
+
+	keyStem = GenerateKey("user", "full", userThatWasFollowed.Username, "")
+	err = cacheDB.Get(common.BaseCtx, keyStem+"username").Err()
 	if err != nil {
 		// If dweet isnt cached in full,
 		if err == redis.Nil {
 			userFollowedInFull = false
+		}
+		return err
+	}
+
+	keyStem = GenerateKey("user", "basic", userThatWasFollowed.Username, "")
+	err = cacheDB.Get(common.BaseCtx, keyStem+"username").Err()
+	if err != nil {
+		// If dweet isnt cached in full,
+		if err == redis.Nil {
+			userFollowedInBasic = false
 		}
 		return err
 	}
@@ -713,6 +880,19 @@ func UnfollowCacheUpdate(userThatWasFollowed db.UserModel, userThatFollowed db.U
 		}
 	}
 
+	if userFollowingInBasic {
+		keyStem := GenerateKey("user", "basic", userThatFollowed.Username, "")
+		err = cacheDB.Decr(common.BaseCtx, keyStem+"followingCount").Err()
+		if err != nil {
+			return err
+		}
+
+		err = ExpireUserAt("basic", userThatFollowed.Username, expireTime)
+		if err != nil {
+			return err
+		}
+	}
+
 	if userFollowedInFull {
 		keyStem := GenerateKey("dweet", "full", userThatWasFollowed.Username, "")
 		// Some version of the user is already cached
@@ -733,6 +913,19 @@ func UnfollowCacheUpdate(userThatWasFollowed db.UserModel, userThatFollowed db.U
 		}
 	} else {
 		err = CacheUser("full", userThatWasFollowed.Username, &userThatWasFollowed, objectsToFetch, feedObjectsToFetch, feedObjectOffset)
+		if err != nil {
+			return err
+		}
+	}
+
+	if userFollowedInBasic {
+		keyStem := GenerateKey("user", "basic", userThatWasFollowed.Username, "")
+		err = cacheDB.Decr(common.BaseCtx, keyStem+"followingCount").Err()
+		if err != nil {
+			return err
+		}
+
+		err = ExpireUserAt("basic", userThatWasFollowed.Username, expireTime)
 		if err != nil {
 			return err
 		}
@@ -807,6 +1000,7 @@ func unlikeCacheUpdateInternal(dweetID string, usernameThatLiked string) error {
 
 	userInFull := true
 	dweetInFull := true
+	dweetInBasic := true
 
 	keyStem := GenerateKey("user", "full", usernameThatLiked, "")
 	err := cacheDB.Get(common.BaseCtx, keyStem+"username").Err()
@@ -862,6 +1056,20 @@ func unlikeCacheUpdateInternal(dweetID string, usernameThatLiked string) error {
 		}
 	}
 
+	if dweetInBasic {
+		keyStem := GenerateKey("dweet", "basic", dweetID, "")
+		// Some version of the user is already cached
+		err = cacheDB.Decr(common.BaseCtx, keyStem+"likeCount").Err()
+		if err != nil {
+			return err
+		}
+
+		err = ExpireDweetAt("basic", dweetID, expireTime)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -872,7 +1080,8 @@ func unredweetCacheUpdateInternal(redweetID string, usernameThatUnredweeted stri
 	// UPSERT the redweeted dweet
 
 	userInFull := true
-	dweetCached := true
+	dweetInFull := true
+	dweetInBasic := true
 
 	keyStem := GenerateKey("user", "full", usernameThatUnredweeted, "")
 	err := cacheDB.Get(common.BaseCtx, keyStem+"username").Err()
@@ -891,7 +1100,17 @@ func unredweetCacheUpdateInternal(redweetID string, usernameThatUnredweeted stri
 	if err != nil {
 		// If dweet isnt cached in full,
 		if err == redis.Nil {
-			dweetCached = false
+			dweetInFull = false
+		}
+		return err
+	}
+
+	keyStem = GenerateKey("dweet", "basic", dweetID, "")
+	err = cacheDB.Get(common.BaseCtx, keyStem+"id").Err()
+	if err != nil {
+		// If dweet isnt cached in full,
+		if err == redis.Nil {
+			dweetInBasic = false
 		}
 		return err
 	}
@@ -914,7 +1133,7 @@ func unredweetCacheUpdateInternal(redweetID string, usernameThatUnredweeted stri
 		}
 	}
 
-	if dweetCached {
+	if dweetInFull {
 		keyStem := GenerateKey("dweet", "full", dweetID, "")
 		// If user is already in cache, we dont need to cache it
 
@@ -927,6 +1146,20 @@ func unredweetCacheUpdateInternal(redweetID string, usernameThatUnredweeted stri
 			if err != nil {
 				return err
 			}
+		}
+
+		err = ExpireRedweetAt(redweetID, expireTime)
+		if err != nil {
+			return err
+		}
+	}
+
+	if dweetInBasic {
+		keyStem := GenerateKey("dweet", "basic", dweetID, "")
+		// If user is already in cache, we dont need to cache it
+		err = cacheDB.Decr(common.BaseCtx, keyStem+"redweetCount").Err()
+		if err != nil {
+			return err
 		}
 
 		err = ExpireRedweetAt(redweetID, expireTime)
@@ -956,6 +1189,7 @@ func unredweetCacheUpdateInternal(redweetID string, usernameThatUnredweeted stri
 // If the user that posted the dweet is cached in full detail, their feedObjects and dweets fields are UPDATEd
 // If the dweet is a reply to a dweet then the dweet replied to is UPDATEd
 func DeleteDweetCacheUpdate(dweetID string) error {
+	// TODO: Dweet being a reply is missing
 	keyStem := GenerateKey("dweet", "full", dweetID, "")
 	dweetMap := []string{
 		keyStem + "dweetBody",
