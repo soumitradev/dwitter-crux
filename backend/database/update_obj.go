@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/soumitradev/Dwitter/backend/cache"
 	"github.com/soumitradev/Dwitter/backend/cdn"
 	"github.com/soumitradev/Dwitter/backend/common"
 	"github.com/soumitradev/Dwitter/backend/prisma/db"
@@ -124,6 +125,11 @@ func UpdateDweet(postID string, username string, body string, mediaLinks []strin
 	if err == db.ErrNotFound {
 		return schema.DweetType{}, fmt.Errorf("dweet not found: %v", err)
 	}
+	if err != nil {
+		return schema.DweetType{}, fmt.Errorf("internal server error: %v", err)
+	}
+
+	err = cache.EditDweetCacheUpdate(*post, repliesToFetch, replyOffset)
 	if err != nil {
 		return schema.DweetType{}, fmt.Errorf("internal server error: %v", err)
 	}
@@ -1624,6 +1630,11 @@ func UpdateUser(username string, name string, email string, bio string, PfpUrl s
 				}
 			}
 		}
+	}
+
+	err = cache.EditUserCacheUpdate(*user, objectsToFetch, feedObjectsToFetch, feedObjectsOffset)
+	if err != nil {
+		return schema.UserType{}, fmt.Errorf("internal server error: %v", err)
 	}
 
 	nuser, err := schema.FormatAsUserType(user, user.Followers(), user.Following(), objectsToFetch, feedObjectList, true)

@@ -3,6 +3,7 @@ package database
 import (
 	"fmt"
 
+	"github.com/soumitradev/Dwitter/backend/cache"
 	"github.com/soumitradev/Dwitter/backend/common"
 	"github.com/soumitradev/Dwitter/backend/prisma/db"
 	"github.com/soumitradev/Dwitter/backend/schema"
@@ -552,6 +553,11 @@ func Follow(followedID string, followerID string, objectsToFetch string, feedObj
 		return schema.UserType{}, fmt.Errorf("internal server error: %v", err)
 	}
 
+	err = cache.FollowCacheUpdate(*user, *authenticatedUser, objectsToFetch, feedObjectsToFetch, feedObjectsOffset)
+	if err != nil {
+		return schema.UserType{}, fmt.Errorf("internal server error: %v", err)
+	}
+
 	knownUsers := authenticatedUser.Following()
 	knownUsers = append(knownUsers, *authenticatedUser)
 
@@ -779,6 +785,11 @@ func Like(likedPostID string, userID string, repliesToFetch int, replyOffset int
 		return schema.DweetType{}, fmt.Errorf("internal server error: %v", err)
 	}
 
+	err = cache.LikeCacheUpdate(*like, *user, repliesToFetch, replyOffset)
+	if err != nil {
+		return schema.DweetType{}, fmt.Errorf("internal server error: %v", err)
+	}
+
 	// Find known people that liked thw dweet
 
 	knownUsers := user.Following()
@@ -982,6 +993,11 @@ func Unlike(postID string, userID string, repliesToFetch int, replyOffset int) (
 	if err == db.ErrNotFound {
 		return schema.DweetType{}, fmt.Errorf("user not found: %v", err)
 	}
+	if err != nil {
+		return schema.DweetType{}, fmt.Errorf("internal server error: %v", err)
+	}
+
+	err = cache.UnlikeCacheUpdate(*post, *user, repliesToFetch, replyOffset)
 	if err != nil {
 		return schema.DweetType{}, fmt.Errorf("internal server error: %v", err)
 	}
@@ -1540,6 +1556,11 @@ func Unfollow(followedID string, followerID string, objectsToFetch string, feedO
 	if err == db.ErrNotFound {
 		return schema.UserType{}, fmt.Errorf("user not found: %v", err)
 	}
+	if err != nil {
+		return schema.UserType{}, fmt.Errorf("internal server error: %v", err)
+	}
+
+	err = cache.UnfollowCacheUpdate(*user, *authenticatedUser, objectsToFetch, feedObjectsToFetch, feedObjectsOffset)
 	if err != nil {
 		return schema.UserType{}, fmt.Errorf("internal server error: %v", err)
 	}

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/soumitradev/Dwitter/backend/auth"
+	"github.com/soumitradev/Dwitter/backend/cache"
 	"github.com/soumitradev/Dwitter/backend/common"
 	"github.com/soumitradev/Dwitter/backend/prisma/db"
 	"github.com/soumitradev/Dwitter/backend/schema"
@@ -162,6 +163,11 @@ func NewDweet(body, username string, mediaLinks []string) (schema.DweetType, err
 		return schema.DweetType{}, fmt.Errorf("internal server error: %v", err)
 	}
 
+	err = cache.CreateDweetCacheUpdate(*createdPost)
+	if err != nil {
+		return schema.DweetType{}, fmt.Errorf("internal server error: %v", err)
+	}
+
 	// Mark media as used to prevent deletion on expiry
 	for _, link := range mediaLinks {
 		common.MediaCreatedButNotUsed[link] = false
@@ -250,6 +256,11 @@ func NewReply(originalPostID string, body string, authorUsername string, mediaLi
 		delete(common.MediaCreatedButNotUsed, link)
 	}
 
+	err = cache.CreateReplyCacheUpdate(*createdReply)
+	if err != nil {
+		return schema.DweetType{}, fmt.Errorf("internal server error: %v", err)
+	}
+
 	// Update original Dweet to show reply
 	replied, err := common.Client.Dweet.FindUnique(
 		db.Dweet.ID.Equals(originalPostID),
@@ -330,6 +341,11 @@ func Redweet(originalPostID, username string) (schema.RedweetType, error) {
 			db.Dweet.Author.Fetch(),
 		),
 	).Exec(common.BaseCtx)
+	if err != nil {
+		return schema.RedweetType{}, fmt.Errorf("internal server error: %v", err)
+	}
+
+	err = cache.RedweetCacheUpdate(*createdRedweet)
 	if err != nil {
 		return schema.RedweetType{}, fmt.Errorf("internal server error: %v", err)
 	}

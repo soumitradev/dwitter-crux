@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/soumitradev/Dwitter/backend/cache"
 	"github.com/soumitradev/Dwitter/backend/cdn"
 	"github.com/soumitradev/Dwitter/backend/common"
 	"github.com/soumitradev/Dwitter/backend/prisma/db"
@@ -84,6 +85,11 @@ func DeleteDweet(postID string, username string, repliesToFetch int, replyOffset
 	if err == db.ErrNotFound {
 		return schema.DweetType{}, fmt.Errorf("dweet not found: %v", err)
 	}
+	if err != nil {
+		return schema.DweetType{}, fmt.Errorf("internal server error: %v", err)
+	}
+
+	err = cache.DeleteDweetCacheUpdate(deleted.ID)
 	if err != nil {
 		return schema.DweetType{}, fmt.Errorf("internal server error: %v", err)
 	}
@@ -490,8 +496,18 @@ func DeleteRedweet(postID string, username string) (schema.RedweetType, error) {
 		return schema.RedweetType{}, fmt.Errorf("internal server error: %v", err)
 	}
 
+	user, err := common.Client.User.FindUnique(
+		db.User.Username.Equals(username),
+	).Exec(common.BaseCtx)
+	if err != nil {
+		return schema.RedweetType{}, err
+	}
+
+	err = cache.UnredweetCacheUpdate(*redweet, *user)
+	if err != nil {
+		return schema.RedweetType{}, err
+	}
+
 	formatted := schema.FormatAsRedweetType(redweet)
 	return formatted, err
 }
-
-// TODO: DeleteUser
