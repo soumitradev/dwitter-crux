@@ -1197,7 +1197,11 @@ func DeleteDweetCacheUpdate(dweetID string) error {
 	keyStem := GenerateKey("dweet", "full", dweetID, "")
 	replyIDs, err := cacheDB.LRange(common.BaseCtx, keyStem+"replyDweets", 0, -1).Result()
 	if err != nil {
-		return err
+		if err == redis.Nil {
+			replyIDs = []string{}
+		} else {
+			return err
+		}
 	}
 	for _, replyID := range replyIDs {
 		DeleteDweetCacheUpdate(replyID)
@@ -1205,7 +1209,11 @@ func DeleteDweetCacheUpdate(dweetID string) error {
 
 	likeUserIDs, err := cacheDB.LRange(common.BaseCtx, keyStem+"likeUsers", 0, -1).Result()
 	if err != nil {
-		return err
+		if err == redis.Nil {
+			likeUserIDs = []string{}
+		} else {
+			return err
+		}
 	}
 	for _, likeUserID := range likeUserIDs {
 		unlikeCacheUpdateInternal(dweetID, likeUserID)
@@ -1213,7 +1221,11 @@ func DeleteDweetCacheUpdate(dweetID string) error {
 
 	redweetUserIDs, err := cacheDB.LRange(common.BaseCtx, keyStem+"redweetUsers", 0, -1).Result()
 	if err != nil {
-		return err
+		if err == redis.Nil {
+			redweetUserIDs = []string{}
+		} else {
+			return err
+		}
 	}
 	for _, redweetUserID := range redweetUserIDs {
 		unredweetCacheUpdateInternal(dweetID, redweetUserID)

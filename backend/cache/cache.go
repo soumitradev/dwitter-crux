@@ -226,9 +226,7 @@ Whew that was a lot of work
 */
 
 // TODO:
-// - Check LPush-es for when there is nothing to push
-// - redis.Nil checks for getting fields that may be absent due to empty LPushes
-// - Better conversion checking (see the first part of the get_cached_user.go GetCachedUserFull function)
+// - Better conversion checking for getting redweets and dweets (see the first part of the get_cached_user.go GetCachedUserFull function)
 // - Check for any leaks
 // - Finish cache integration of list-objects
 
@@ -637,7 +635,10 @@ func CacheDweet(detailLevel string, id string, obj *db.DweetModel, repliesToFetc
 		interfaceList[i] = mediaLink
 	}
 	if len(interfaceList) > 0 {
-		cacheDB.LPush(common.BaseCtx, keyStem+"media", interfaceList...)
+		err := cacheDB.LPush(common.BaseCtx, keyStem+"media", interfaceList...).Err()
+		if err != nil {
+			return err
+		}
 	}
 
 	err := cacheDB.MSet(common.BaseCtx, dweetMap).Err()

@@ -59,7 +59,11 @@ func GetCachedDweetFull(id string, repliesToFetch int, replyOffset int) (schema.
 
 	mediaLinks, err := cacheDB.LRange(common.BaseCtx, keyStem+"media", 0, -1).Result()
 	if err != nil {
-		return schema.DweetType{}, err
+		if err == redis.Nil {
+			mediaLinks = []string{}
+		} else {
+			return schema.DweetType{}, err
+		}
 	}
 
 	postedAt, err := time.Parse(util.TimeUTCFormat, valList[4].(string))
@@ -96,7 +100,11 @@ func GetCachedDweetFull(id string, repliesToFetch int, replyOffset int) (schema.
 
 	replyIDs, err := cacheDB.LRange(common.BaseCtx, keyStem+"replyDweets", 0, -1).Result()
 	if err != nil {
-		return schema.DweetType{}, err
+		if err == redis.Nil {
+			replyIDs = []string{}
+		} else {
+			return schema.DweetType{}, err
+		}
 	}
 	hitIDs, hitInfo, err := GetCacheHit(replyIDs, repliesToFetch, replyOffset)
 	if err != nil {
@@ -144,7 +152,12 @@ func GetCachedDweetFull(id string, repliesToFetch int, replyOffset int) (schema.
 				if err != nil {
 					return schema.DweetType{}, err
 				}
-				cacheDB.LPush(common.BaseCtx, keyStem+"replyDweets", interfaceIDList...)
+				if len(interfaceIDList) > 0 {
+					err = cacheDB.LPush(common.BaseCtx, keyStem+"replyDweets", interfaceIDList...).Err()
+					if err != nil {
+						return schema.DweetType{}, err
+					}
+				}
 				ExpireDweetAt("full", id, expireTime)
 			} else {
 				feedObject, err := GetCachedDweetBasic(replyID)
@@ -194,7 +207,12 @@ func GetCachedDweetFull(id string, repliesToFetch int, replyOffset int) (schema.
 				if err != nil {
 					return schema.DweetType{}, err
 				}
-				cacheDB.LPush(common.BaseCtx, keyStem+"dweets", interfaceIDList...)
+				if len(interfaceIDList) > 0 {
+					err := cacheDB.LPush(common.BaseCtx, keyStem+"dweets", interfaceIDList...).Err()
+					if err != nil {
+						return schema.DweetType{}, err
+					}
+				}
 				ExpireDweetAt("full", id, expireTime)
 			} else {
 				reply, err := GetCachedDweetBasic(feedObjectID)
@@ -210,7 +228,11 @@ func GetCachedDweetFull(id string, repliesToFetch int, replyOffset int) (schema.
 
 	likeUsers, err := cacheDB.LRange(common.BaseCtx, keyStem+"likeUsers", 0, -1).Result()
 	if err != nil {
-		return schema.DweetType{}, err
+		if err == redis.Nil {
+			likeUsers = []string{}
+		} else {
+			return schema.DweetType{}, err
+		}
 	}
 
 	likeUserList := make([]schema.BasicUserType, len(likeUsers))
@@ -226,7 +248,11 @@ func GetCachedDweetFull(id string, repliesToFetch int, replyOffset int) (schema.
 
 	redweetUsers, err := cacheDB.LRange(common.BaseCtx, keyStem+"redweetUsers", 0, -1).Result()
 	if err != nil {
-		return schema.DweetType{}, err
+		if err == redis.Nil {
+			redweetUsers = []string{}
+		} else {
+			return schema.DweetType{}, err
+		}
 	}
 
 	redweetUserList := make([]schema.BasicUserType, len(redweetUsers))
@@ -308,7 +334,11 @@ func GetCachedDweetBasic(id string) (schema.BasicDweetType, error) {
 
 			mediaLinks, err := cacheDB.LRange(common.BaseCtx, keyStem+"media", 0, -1).Result()
 			if err != nil {
-				return schema.BasicDweetType{}, err
+				if err == redis.Nil {
+					mediaLinks = []string{}
+				} else {
+					return schema.BasicDweetType{}, err
+				}
 			}
 
 			postedAt, err := time.Parse(util.TimeUTCFormat, valList[4].(string))
@@ -363,7 +393,11 @@ func GetCachedDweetBasic(id string) (schema.BasicDweetType, error) {
 
 	mediaLinks, err := cacheDB.LRange(common.BaseCtx, keyStem+"media", 0, -1).Result()
 	if err != nil {
-		return schema.BasicDweetType{}, err
+		if err == redis.Nil {
+			mediaLinks = []string{}
+		} else {
+			return schema.BasicDweetType{}, err
+		}
 	}
 
 	postedAt, err := time.Parse(util.TimeUTCFormat, valList[4].(string))

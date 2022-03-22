@@ -7,6 +7,7 @@ import (
 
 	"container/list"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/soumitradev/Dwitter/backend/common"
 	"github.com/soumitradev/Dwitter/backend/prisma/db"
 	"github.com/soumitradev/Dwitter/backend/util"
@@ -58,14 +59,20 @@ func UpsertUser(userID string, obj *db.UserModel, objectsToFetch string, feedObj
 			if err != nil {
 				return err
 			}
-			err = cacheDB.LPush(common.BaseCtx, keyStem+"feedObjects", feedObjectIDList...).Err()
-			if err != nil {
-				return err
+			if len(feedObjectIDList) > 0 {
+				err = cacheDB.LPush(common.BaseCtx, keyStem+"feedObjects", feedObjectIDList...).Err()
+				if err != nil {
+					return err
+				}
 			}
 		} else {
 			cachedArr, err := cacheDB.LRange(common.BaseCtx, keyStem+"feedObjects", 0, -1).Result()
 			if err != nil {
-				return err
+				if err == redis.Nil {
+					cachedArr = []string{}
+				} else {
+					return err
+				}
 			}
 
 			cachedList := list.New()
@@ -132,9 +139,11 @@ func UpsertUser(userID string, obj *db.UserModel, objectsToFetch string, feedObj
 						if err != nil {
 							return err
 						}
-						err = cacheDB.LPush(common.BaseCtx, keyStem+"feedObjects", processedArr...).Err()
-						if err != nil {
-							return err
+						if len(processedArr) > 0 {
+							err = cacheDB.LPush(common.BaseCtx, keyStem+"feedObjects", processedArr...).Err()
+							if err != nil {
+								return err
+							}
 						}
 
 						return nil
@@ -241,9 +250,11 @@ func UpsertUser(userID string, obj *db.UserModel, objectsToFetch string, feedObj
 			if err != nil {
 				return err
 			}
-			err = cacheDB.LPush(common.BaseCtx, keyStem+"feedObjects", processedArr...).Err()
-			if err != nil {
-				return err
+			if len(processedArr) > 0 {
+				err = cacheDB.LPush(common.BaseCtx, keyStem+"feedObjects", processedArr...).Err()
+				if err != nil {
+					return err
+				}
 			}
 		}
 	case "dweet":
@@ -264,14 +275,20 @@ func UpsertUser(userID string, obj *db.UserModel, objectsToFetch string, feedObj
 			if err != nil {
 				return err
 			}
-			err = cacheDB.LPush(common.BaseCtx, keyStem+"dweets", dweetIDList...).Err()
-			if err != nil {
-				return err
+			if len(dweetIDList) > 0 {
+				err = cacheDB.LPush(common.BaseCtx, keyStem+"dweets", dweetIDList...).Err()
+				if err != nil {
+					return err
+				}
 			}
 		} else {
 			cachedArr, err := cacheDB.LRange(common.BaseCtx, keyStem+"dweets", 0, -1).Result()
 			if err != nil {
-				return err
+				if err == redis.Nil {
+					cachedArr = []string{}
+				} else {
+					return err
+				}
 			}
 
 			cachedList := list.New()
@@ -329,9 +346,11 @@ func UpsertUser(userID string, obj *db.UserModel, objectsToFetch string, feedObj
 						if err != nil {
 							return err
 						}
-						err = cacheDB.LPush(common.BaseCtx, keyStem+"dweets", processedArr...).Err()
-						if err != nil {
-							return err
+						if len(processedArr) > 0 {
+							err = cacheDB.LPush(common.BaseCtx, keyStem+"dweets", processedArr...).Err()
+							if err != nil {
+								return err
+							}
 						}
 
 						return nil
@@ -392,9 +411,11 @@ func UpsertUser(userID string, obj *db.UserModel, objectsToFetch string, feedObj
 						if err != nil {
 							return err
 						}
-						err = cacheDB.LPush(common.BaseCtx, keyStem+"dweets", processedArr...).Err()
-						if err != nil {
-							return err
+						if len(processedArr) > 0 {
+							err = cacheDB.LPush(common.BaseCtx, keyStem+"dweets", processedArr...).Err()
+							if err != nil {
+								return err
+							}
 						}
 
 						return nil
@@ -447,9 +468,11 @@ func UpsertUser(userID string, obj *db.UserModel, objectsToFetch string, feedObj
 			if err != nil {
 				return err
 			}
-			err = cacheDB.LPush(common.BaseCtx, keyStem+"dweets", processedArr...).Err()
-			if err != nil {
-				return err
+			if len(processedArr) > 0 {
+				err = cacheDB.LPush(common.BaseCtx, keyStem+"dweets", processedArr...).Err()
+				if err != nil {
+					return err
+				}
 			}
 		}
 	case "redweet":
@@ -471,14 +494,20 @@ func UpsertUser(userID string, obj *db.UserModel, objectsToFetch string, feedObj
 			if err != nil {
 				return err
 			}
-			err = cacheDB.LPush(common.BaseCtx, keyStem+"redweets", redweetIDList...).Err()
-			if err != nil {
-				return err
+			if len(redweetIDList) > 0 {
+				err = cacheDB.LPush(common.BaseCtx, keyStem+"redweets", redweetIDList...).Err()
+				if err != nil {
+					return err
+				}
 			}
 		} else {
 			cachedArr, err := cacheDB.LRange(common.BaseCtx, keyStem+"redweets", 0, -1).Result()
 			if err != nil {
-				return err
+				if err == redis.Nil {
+					cachedArr = []string{}
+				} else {
+					return err
+				}
 			}
 
 			cachedList := list.New()
@@ -537,9 +566,11 @@ func UpsertUser(userID string, obj *db.UserModel, objectsToFetch string, feedObj
 						if err != nil {
 							return err
 						}
-						err = cacheDB.LPush(common.BaseCtx, keyStem+"redweets", processedArr...).Err()
-						if err != nil {
-							return err
+						if len(processedArr) > 0 {
+							err = cacheDB.LPush(common.BaseCtx, keyStem+"redweets", processedArr...).Err()
+							if err != nil {
+								return err
+							}
 						}
 
 						return nil
@@ -601,9 +632,11 @@ func UpsertUser(userID string, obj *db.UserModel, objectsToFetch string, feedObj
 						if err != nil {
 							return err
 						}
-						err = cacheDB.LPush(common.BaseCtx, keyStem+"redweets", processedArr...).Err()
-						if err != nil {
-							return err
+						if len(processedArr) > 0 {
+							err = cacheDB.LPush(common.BaseCtx, keyStem+"redweets", processedArr...).Err()
+							if err != nil {
+								return err
+							}
 						}
 
 						return nil
@@ -657,9 +690,11 @@ func UpsertUser(userID string, obj *db.UserModel, objectsToFetch string, feedObj
 			if err != nil {
 				return err
 			}
-			err = cacheDB.LPush(common.BaseCtx, keyStem+"redweets", processedArr...).Err()
-			if err != nil {
-				return err
+			if len(processedArr) > 0 {
+				err = cacheDB.LPush(common.BaseCtx, keyStem+"redweets", processedArr...).Err()
+				if err != nil {
+					return err
+				}
 			}
 		}
 	case "redweetedDweet":
@@ -680,14 +715,20 @@ func UpsertUser(userID string, obj *db.UserModel, objectsToFetch string, feedObj
 			if err != nil {
 				return err
 			}
-			err = cacheDB.LPush(common.BaseCtx, keyStem+"redweetedDweets", redweetedDweetIDList...).Err()
-			if err != nil {
-				return err
+			if len(redweetedDweetIDList) > 0 {
+				err = cacheDB.LPush(common.BaseCtx, keyStem+"redweetedDweets", redweetedDweetIDList...).Err()
+				if err != nil {
+					return err
+				}
 			}
 		} else {
 			cachedArr, err := cacheDB.LRange(common.BaseCtx, keyStem+"redweetedDweets", 0, -1).Result()
 			if err != nil {
-				return err
+				if err == redis.Nil {
+					cachedArr = []string{}
+				} else {
+					return err
+				}
 			}
 
 			cachedList := list.New()
@@ -745,9 +786,11 @@ func UpsertUser(userID string, obj *db.UserModel, objectsToFetch string, feedObj
 						if err != nil {
 							return err
 						}
-						err = cacheDB.LPush(common.BaseCtx, keyStem+"redweetedDweets", processedArr...).Err()
-						if err != nil {
-							return err
+						if len(processedArr) > 0 {
+							err = cacheDB.LPush(common.BaseCtx, keyStem+"redweetedDweets", processedArr...).Err()
+							if err != nil {
+								return err
+							}
 						}
 
 						return nil
@@ -808,9 +851,11 @@ func UpsertUser(userID string, obj *db.UserModel, objectsToFetch string, feedObj
 						if err != nil {
 							return err
 						}
-						err = cacheDB.LPush(common.BaseCtx, keyStem+"redweetedDweets", processedArr...).Err()
-						if err != nil {
-							return err
+						if len(processedArr) > 0 {
+							err = cacheDB.LPush(common.BaseCtx, keyStem+"redweetedDweets", processedArr...).Err()
+							if err != nil {
+								return err
+							}
 						}
 
 						return nil
@@ -863,9 +908,11 @@ func UpsertUser(userID string, obj *db.UserModel, objectsToFetch string, feedObj
 			if err != nil {
 				return err
 			}
-			err = cacheDB.LPush(common.BaseCtx, keyStem+"redweetedDweets", processedArr...).Err()
-			if err != nil {
-				return err
+			if len(processedArr) > 0 {
+				err = cacheDB.LPush(common.BaseCtx, keyStem+"redweetedDweets", processedArr...).Err()
+				if err != nil {
+					return err
+				}
 			}
 		}
 	case "liked":
@@ -886,14 +933,20 @@ func UpsertUser(userID string, obj *db.UserModel, objectsToFetch string, feedObj
 			if err != nil {
 				return err
 			}
-			err = cacheDB.LPush(common.BaseCtx, keyStem+"likedDweets", likedDweetIDList...).Err()
-			if err != nil {
-				return err
+			if len(likedDweetIDList) > 0 {
+				err = cacheDB.LPush(common.BaseCtx, keyStem+"likedDweets", likedDweetIDList...).Err()
+				if err != nil {
+					return err
+				}
 			}
 		} else {
 			cachedArr, err := cacheDB.LRange(common.BaseCtx, keyStem+"likedDweets", 0, -1).Result()
 			if err != nil {
-				return err
+				if err == redis.Nil {
+					cachedArr = []string{}
+				} else {
+					return err
+				}
 			}
 
 			cachedList := list.New()
@@ -951,9 +1004,11 @@ func UpsertUser(userID string, obj *db.UserModel, objectsToFetch string, feedObj
 						if err != nil {
 							return err
 						}
-						err = cacheDB.LPush(common.BaseCtx, keyStem+"likedDweets", processedArr...).Err()
-						if err != nil {
-							return err
+						if len(processedArr) > 0 {
+							err = cacheDB.LPush(common.BaseCtx, keyStem+"likedDweets", processedArr...).Err()
+							if err != nil {
+								return err
+							}
 						}
 
 						return nil
@@ -1014,9 +1069,11 @@ func UpsertUser(userID string, obj *db.UserModel, objectsToFetch string, feedObj
 						if err != nil {
 							return err
 						}
-						err = cacheDB.LPush(common.BaseCtx, keyStem+"likedDweets", processedArr...).Err()
-						if err != nil {
-							return err
+						if len(processedArr) > 0 {
+							err = cacheDB.LPush(common.BaseCtx, keyStem+"likedDweets", processedArr...).Err()
+							if err != nil {
+								return err
+							}
 						}
 
 						return nil
@@ -1069,9 +1126,11 @@ func UpsertUser(userID string, obj *db.UserModel, objectsToFetch string, feedObj
 			if err != nil {
 				return err
 			}
-			err = cacheDB.LPush(common.BaseCtx, keyStem+"likedDweets", processedArr...).Err()
-			if err != nil {
-				return err
+			if len(processedArr) > 0 {
+				err = cacheDB.LPush(common.BaseCtx, keyStem+"likedDweets", processedArr...).Err()
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -1108,14 +1167,20 @@ func UpsertDweet(dweetID string, obj *db.DweetModel, repliesToFetch int, replyOf
 		if err != nil {
 			return err
 		}
-		err = cacheDB.LPush(common.BaseCtx, keyStem+"replyDweets", replyIDList...).Err()
-		if err != nil {
-			return err
+		if len(replyIDList) > 0 {
+			err = cacheDB.LPush(common.BaseCtx, keyStem+"replyDweets", replyIDList...).Err()
+			if err != nil {
+				return err
+			}
 		}
 	} else {
 		cachedArr, err := cacheDB.LRange(common.BaseCtx, keyStem+"replyDweets", 0, -1).Result()
 		if err != nil {
-			return err
+			if err == redis.Nil {
+				cachedArr = []string{}
+			} else {
+				return err
+			}
 		}
 
 		cachedList := list.New()
@@ -1173,9 +1238,11 @@ func UpsertDweet(dweetID string, obj *db.DweetModel, repliesToFetch int, replyOf
 					if err != nil {
 						return err
 					}
-					err = cacheDB.LPush(common.BaseCtx, keyStem+"replyDweets", processedArr...).Err()
-					if err != nil {
-						return err
+					if len(processedArr) > 0 {
+						err = cacheDB.LPush(common.BaseCtx, keyStem+"replyDweets", processedArr...).Err()
+						if err != nil {
+							return err
+						}
 					}
 
 					return nil
@@ -1236,9 +1303,11 @@ func UpsertDweet(dweetID string, obj *db.DweetModel, repliesToFetch int, replyOf
 					if err != nil {
 						return err
 					}
-					err = cacheDB.LPush(common.BaseCtx, keyStem+"replyDweets", processedArr...).Err()
-					if err != nil {
-						return err
+					if len(processedArr) > 0 {
+						err = cacheDB.LPush(common.BaseCtx, keyStem+"replyDweets", processedArr...).Err()
+						if err != nil {
+							return err
+						}
 					}
 
 					return nil
@@ -1291,9 +1360,11 @@ func UpsertDweet(dweetID string, obj *db.DweetModel, repliesToFetch int, replyOf
 		if err != nil {
 			return err
 		}
-		err = cacheDB.LPush(common.BaseCtx, keyStem+"replyDweets", processedArr...).Err()
-		if err != nil {
-			return err
+		if len(processedArr) > 0 {
+			err = cacheDB.LPush(common.BaseCtx, keyStem+"replyDweets", processedArr...).Err()
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return nil

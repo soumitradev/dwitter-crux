@@ -45,17 +45,41 @@ func GetCachedUserBasic(id string) (user schema.BasicUserType, err error) {
 			if err != nil {
 				return schema.BasicUserType{}, err
 			}
-			followerCount, err := strconv.Atoi(valList[5].(string))
-			if err != nil {
-				return schema.BasicUserType{}, err
+
+			followerCount := 0
+			if valList[5] == nil {
+				return schema.BasicUserType{}, redis.Nil
+			} else if followerCountString, ok := valList[5].(string); ok {
+				followerCount, err = strconv.Atoi(followerCountString)
+				if err != nil {
+					return schema.BasicUserType{}, fmt.Errorf("internal server error: %v", err)
+				}
+			} else {
+				return schema.BasicUserType{}, fmt.Errorf("internal server error: %v", err)
 			}
-			followingCount, err := strconv.Atoi(valList[6].(string))
-			if err != nil {
-				return schema.BasicUserType{}, err
+
+			followingCount := 0
+			if valList[6] == nil {
+				return schema.BasicUserType{}, redis.Nil
+			} else if followingCountString, ok := valList[6].(string); ok {
+				followingCount, err = strconv.Atoi(followingCountString)
+				if err != nil {
+					return schema.BasicUserType{}, fmt.Errorf("internal server error: %v", err)
+				}
+			} else {
+				return schema.BasicUserType{}, fmt.Errorf("internal server error: %v", err)
 			}
-			createdAt, err := time.Parse(util.TimeUTCFormat, valList[7].(string))
-			if err != nil {
-				return schema.BasicUserType{}, err
+
+			createdAt := time.Now().UTC()
+			if valList[7] == nil {
+				return schema.BasicUserType{}, redis.Nil
+			} else if createdAtString, ok := valList[7].(string); ok {
+				createdAt, err = time.Parse(util.TimeUTCFormat, createdAtString)
+				if err != nil {
+					return schema.BasicUserType{}, fmt.Errorf("internal server error: %v", err)
+				}
+			} else {
+				return schema.BasicUserType{}, fmt.Errorf("internal server error: %v", err)
 			}
 			cachedUser := schema.BasicUserType{
 				Username:       valList[0].(string),
@@ -126,14 +150,30 @@ func GetCachedUserFull(id string, objectsToFetch string, feedObjectsToFetch int,
 		return schema.UserType{}, fmt.Errorf("internal server error: %v", err)
 	}
 
-	followingCount, err := strconv.Atoi(valList[6].(string))
-	if err != nil {
-		return schema.UserType{}, err
+	followingCount := 0
+	if valList[6] == nil {
+		return schema.UserType{}, redis.Nil
+	} else if followingCountString, ok := valList[6].(string); ok {
+		followingCount, err = strconv.Atoi(followingCountString)
+		if err != nil {
+			return schema.UserType{}, fmt.Errorf("internal server error: %v", err)
+		}
+	} else {
+		return schema.UserType{}, fmt.Errorf("internal server error: %v", err)
 	}
-	createdAt, err := time.Parse(util.TimeUTCFormat, valList[7].(string))
-	if err != nil {
-		return schema.UserType{}, err
+
+	createdAt := time.Now().UTC()
+	if valList[7] == nil {
+		return schema.UserType{}, redis.Nil
+	} else if createdAtString, ok := valList[7].(string); ok {
+		createdAt, err = time.Parse(util.TimeUTCFormat, createdAtString)
+		if err != nil {
+			return schema.UserType{}, fmt.Errorf("internal server error: %v", err)
+		}
+	} else {
+		return schema.UserType{}, fmt.Errorf("internal server error: %v", err)
 	}
+
 	cachedUser := schema.UserType{
 		Username:       valList[0].(string),
 		Name:           valList[1].(string),
@@ -150,7 +190,11 @@ func GetCachedUserFull(id string, objectsToFetch string, feedObjectsToFetch int,
 	case "feed":
 		feedObjectIDs, err := cacheDB.LRange(common.BaseCtx, keyStem+"feedObjects", 0, -1).Result()
 		if err != nil {
-			return schema.UserType{}, err
+			if err == redis.Nil {
+				feedObjectIDs = []string{}
+			} else {
+				return schema.UserType{}, err
+			}
 		}
 		hitIDs, hitInfo, err := GetCacheHit(feedObjectIDs, feedObjectsToFetch, feedObjectsOffset)
 		if err != nil {
@@ -208,7 +252,12 @@ func GetCachedUserFull(id string, objectsToFetch string, feedObjectsToFetch int,
 					if err != nil {
 						return schema.UserType{}, err
 					}
-					cacheDB.LPush(common.BaseCtx, keyStem+"feedObjects", interfaceIDList...)
+					if len(interfaceIDList) > 0 {
+						err := cacheDB.LPush(common.BaseCtx, keyStem+"feedObjects", interfaceIDList...).Err()
+						if err != nil {
+							return schema.UserType{}, err
+						}
+					}
 					ExpireUserAt("full", id, expireTime)
 				} else {
 					var feedObject interface{}
@@ -269,7 +318,12 @@ func GetCachedUserFull(id string, objectsToFetch string, feedObjectsToFetch int,
 					if err != nil {
 						return schema.UserType{}, err
 					}
-					cacheDB.LPush(common.BaseCtx, keyStem+"feedObjects", interfaceIDList...)
+					if len(interfaceIDList) > 0 {
+						err := cacheDB.LPush(common.BaseCtx, keyStem+"feedObjects", interfaceIDList...).Err()
+						if err != nil {
+							return schema.UserType{}, err
+						}
+					}
 					ExpireUserAt("full", id, expireTime)
 				} else {
 					var feedObject interface{}
@@ -290,7 +344,11 @@ func GetCachedUserFull(id string, objectsToFetch string, feedObjectsToFetch int,
 	case "dweet":
 		feedObjectIDs, err := cacheDB.LRange(common.BaseCtx, keyStem+"dweets", 0, -1).Result()
 		if err != nil {
-			return schema.UserType{}, err
+			if err == redis.Nil {
+				feedObjectIDs = []string{}
+			} else {
+				return schema.UserType{}, err
+			}
 		}
 		hitIDs, hitInfo, err := GetCacheHit(feedObjectIDs, feedObjectsToFetch, feedObjectsOffset)
 		if err != nil {
@@ -341,7 +399,12 @@ func GetCachedUserFull(id string, objectsToFetch string, feedObjectsToFetch int,
 					if err != nil {
 						return schema.UserType{}, err
 					}
-					cacheDB.LPush(common.BaseCtx, keyStem+"dweets", interfaceIDList...)
+					if len(interfaceIDList) > 0 {
+						err := cacheDB.LPush(common.BaseCtx, keyStem+"dweets", interfaceIDList...).Err()
+						if err != nil {
+							return schema.UserType{}, err
+						}
+					}
 					ExpireUserAt("full", id, expireTime)
 				} else {
 					feedObject, err := GetCachedDweetBasic(feedObjectID)
@@ -391,7 +454,12 @@ func GetCachedUserFull(id string, objectsToFetch string, feedObjectsToFetch int,
 					if err != nil {
 						return schema.UserType{}, err
 					}
-					cacheDB.LPush(common.BaseCtx, keyStem+"dweets", interfaceIDList...)
+					if len(interfaceIDList) > 0 {
+						err := cacheDB.LPush(common.BaseCtx, keyStem+"dweets", interfaceIDList...).Err()
+						if err != nil {
+							return schema.UserType{}, err
+						}
+					}
 					ExpireUserAt("full", id, expireTime)
 				} else {
 					feedObject, err := GetCachedDweetBasic(feedObjectID)
@@ -407,7 +475,11 @@ func GetCachedUserFull(id string, objectsToFetch string, feedObjectsToFetch int,
 	case "redweet":
 		feedObjectIDs, err := cacheDB.LRange(common.BaseCtx, keyStem+"redweets", 0, -1).Result()
 		if err != nil {
-			return schema.UserType{}, err
+			if err == redis.Nil {
+				feedObjectIDs = []string{}
+			} else {
+				return schema.UserType{}, err
+			}
 		}
 		hitIDs, hitInfo, err := GetCacheHit(feedObjectIDs, feedObjectsToFetch, feedObjectsOffset)
 		if err != nil {
@@ -458,7 +530,12 @@ func GetCachedUserFull(id string, objectsToFetch string, feedObjectsToFetch int,
 					if err != nil {
 						return schema.UserType{}, err
 					}
-					cacheDB.LPush(common.BaseCtx, keyStem+"redweets", interfaceIDList...)
+					if len(interfaceIDList) > 0 {
+						err := cacheDB.LPush(common.BaseCtx, keyStem+"redweets", interfaceIDList...).Err()
+						if err != nil {
+							return schema.UserType{}, err
+						}
+					}
 					ExpireUserAt("full", id, expireTime)
 				} else {
 					feedObject, err := GetCachedRedweet(feedObjectID)
@@ -508,7 +585,12 @@ func GetCachedUserFull(id string, objectsToFetch string, feedObjectsToFetch int,
 					if err != nil {
 						return schema.UserType{}, err
 					}
-					cacheDB.LPush(common.BaseCtx, keyStem+"redweets", interfaceIDList...)
+					if len(interfaceIDList) > 0 {
+						err := cacheDB.LPush(common.BaseCtx, keyStem+"redweets", interfaceIDList...).Err()
+						if err != nil {
+							return schema.UserType{}, err
+						}
+					}
 					ExpireUserAt("full", id, expireTime)
 				} else {
 					feedObject, err := GetCachedRedweet(feedObjectID)
@@ -524,7 +606,11 @@ func GetCachedUserFull(id string, objectsToFetch string, feedObjectsToFetch int,
 	case "redweetedDweet":
 		feedObjectIDs, err := cacheDB.LRange(common.BaseCtx, keyStem+"redweetedDweets", 0, -1).Result()
 		if err != nil {
-			return schema.UserType{}, err
+			if err == redis.Nil {
+				feedObjectIDs = []string{}
+			} else {
+				return schema.UserType{}, err
+			}
 		}
 		hitIDs, hitInfo, err := GetCacheHit(feedObjectIDs, feedObjectsToFetch, feedObjectsOffset)
 		if err != nil {
@@ -575,7 +661,12 @@ func GetCachedUserFull(id string, objectsToFetch string, feedObjectsToFetch int,
 					if err != nil {
 						return schema.UserType{}, err
 					}
-					cacheDB.LPush(common.BaseCtx, keyStem+"redweetedDweets", interfaceIDList...)
+					if len(interfaceIDList) > 0 {
+						err := cacheDB.LPush(common.BaseCtx, keyStem+"redweetedDweets", interfaceIDList...).Err()
+						if err != nil {
+							return schema.UserType{}, err
+						}
+					}
 					ExpireUserAt("full", id, expireTime)
 				} else {
 					feedObject, err := GetCachedDweetBasic(feedObjectID)
@@ -625,7 +716,12 @@ func GetCachedUserFull(id string, objectsToFetch string, feedObjectsToFetch int,
 					if err != nil {
 						return schema.UserType{}, err
 					}
-					cacheDB.LPush(common.BaseCtx, keyStem+"redweetedDweets", interfaceIDList...)
+					if len(interfaceIDList) > 0 {
+						err := cacheDB.LPush(common.BaseCtx, keyStem+"redweetedDweets", interfaceIDList...).Err()
+						if err != nil {
+							return schema.UserType{}, err
+						}
+					}
 					ExpireUserAt("full", id, expireTime)
 				} else {
 					feedObject, err := GetCachedDweetBasic(feedObjectID)
@@ -641,7 +737,11 @@ func GetCachedUserFull(id string, objectsToFetch string, feedObjectsToFetch int,
 	case "liked":
 		feedObjectIDs, err := cacheDB.LRange(common.BaseCtx, keyStem+"likedDweets", 0, -1).Result()
 		if err != nil {
-			return schema.UserType{}, err
+			if err == redis.Nil {
+				feedObjectIDs = []string{}
+			} else {
+				return schema.UserType{}, err
+			}
 		}
 		hitIDs, hitInfo, err := GetCacheHit(feedObjectIDs, feedObjectsToFetch, feedObjectsOffset)
 		if err != nil {
@@ -692,7 +792,12 @@ func GetCachedUserFull(id string, objectsToFetch string, feedObjectsToFetch int,
 					if err != nil {
 						return schema.UserType{}, err
 					}
-					cacheDB.LPush(common.BaseCtx, keyStem+"likedDweets", interfaceIDList...)
+					if len(interfaceIDList) > 0 {
+						err := cacheDB.LPush(common.BaseCtx, keyStem+"likedDweets", interfaceIDList...).Err()
+						if err != nil {
+							return schema.UserType{}, err
+						}
+					}
 					ExpireUserAt("full", id, expireTime)
 				} else {
 					feedObject, err := GetCachedDweetBasic(feedObjectID)
@@ -742,7 +847,12 @@ func GetCachedUserFull(id string, objectsToFetch string, feedObjectsToFetch int,
 					if err != nil {
 						return schema.UserType{}, err
 					}
-					cacheDB.LPush(common.BaseCtx, keyStem+"likedDweets", interfaceIDList...)
+					if len(interfaceIDList) > 0 {
+						err := cacheDB.LPush(common.BaseCtx, keyStem+"likedDweets", interfaceIDList...).Err()
+						if err != nil {
+							return schema.UserType{}, err
+						}
+					}
 					ExpireUserAt("full", id, expireTime)
 				} else {
 					feedObject, err := GetCachedDweetBasic(feedObjectID)
@@ -761,7 +871,11 @@ func GetCachedUserFull(id string, objectsToFetch string, feedObjectsToFetch int,
 
 	followers, err := cacheDB.LRange(common.BaseCtx, keyStem+"followers", 0, -1).Result()
 	if err != nil {
-		return schema.UserType{}, err
+		if err == redis.Nil {
+			followers = []string{}
+		} else {
+			return schema.UserType{}, err
+		}
 	}
 
 	followerList := make([]schema.BasicUserType, len(followers))
@@ -777,7 +891,11 @@ func GetCachedUserFull(id string, objectsToFetch string, feedObjectsToFetch int,
 
 	following, err := cacheDB.LRange(common.BaseCtx, keyStem+"following", 0, -1).Result()
 	if err != nil {
-		return schema.UserType{}, err
+		if err == redis.Nil {
+			following = []string{}
+		} else {
+			return schema.UserType{}, err
+		}
 	}
 
 	followingList := make([]schema.BasicUserType, len(following))
