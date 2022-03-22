@@ -226,7 +226,13 @@ Whew that was a lot of work
 */
 
 // TODO:
+// - Check LPush-es for when there is nothing to push
+// - redis.Nil checks for getting fields that may be absent due to empty LPushes
+// - Better conversion checking (see the first part of the get_cached_user.go GetCachedUserFull function)
+// - Check for any leaks
 // - Finish cache integration of list-objects
+
+var cacheObjTTL = time.Hour
 
 func CacheUser(detailLevel string, id string, obj *db.UserModel, objectsToFetch string, feedObjectsToFetch int, feedObjectsOffset int) error {
 	keyStem := GenerateKey("user", detailLevel, id, "")
@@ -245,7 +251,7 @@ func CacheUser(detailLevel string, id string, obj *db.UserModel, objectsToFetch 
 		return err
 	}
 
-	expireTime := time.Now().UTC().Add(time.Hour)
+	expireTime := time.Now().UTC().Add(cacheObjTTL)
 	for key := range userMap {
 		err = cacheDB.PExpireAt(common.BaseCtx, key, expireTime).Err()
 		if err != nil {
@@ -276,24 +282,28 @@ func CacheUser(detailLevel string, id string, obj *db.UserModel, objectsToFetch 
 			}
 		}
 
-		err = cacheDB.LPush(common.BaseCtx, keyStem+"followers", followers...).Err()
-		if err != nil {
-			return err
+		if len(followers) > 0 {
+			err = cacheDB.LPush(common.BaseCtx, keyStem+"followers", followers...).Err()
+			if err != nil {
+				return err
+			}
+
+			err = cacheDB.PExpireAt(common.BaseCtx, keyStem+"followers", expireTime).Err()
+			if err != nil {
+				return err
+			}
 		}
 
-		err = cacheDB.PExpireAt(common.BaseCtx, keyStem+"followers", expireTime).Err()
-		if err != nil {
-			return err
-		}
+		if len(following) > 0 {
+			err = cacheDB.LPush(common.BaseCtx, keyStem+"following", following...).Err()
+			if err != nil {
+				return err
+			}
 
-		err = cacheDB.LPush(common.BaseCtx, keyStem+"following", following...).Err()
-		if err != nil {
-			return err
-		}
-
-		err = cacheDB.PExpireAt(common.BaseCtx, keyStem+"following", expireTime).Err()
-		if err != nil {
-			return err
+			err = cacheDB.PExpireAt(common.BaseCtx, keyStem+"following", expireTime).Err()
+			if err != nil {
+				return err
+			}
 		}
 
 		switch objectsToFetch {
@@ -350,9 +360,11 @@ func CacheUser(detailLevel string, id string, obj *db.UserModel, objectsToFetch 
 				}
 			}
 
-			err = cacheDB.LPush(common.BaseCtx, keyStem+"feedObjects", feedObjectIDList...).Err()
-			if err != nil {
-				return err
+			if len(feedObjectIDList) > 0 {
+				err = cacheDB.LPush(common.BaseCtx, keyStem+"feedObjects", feedObjectIDList...).Err()
+				if err != nil {
+					return err
+				}
 			}
 
 			if feedObjectsOffset > 0 {
@@ -398,9 +410,11 @@ func CacheUser(detailLevel string, id string, obj *db.UserModel, objectsToFetch 
 				}
 			}
 
-			err = cacheDB.LPush(common.BaseCtx, keyStem+"dweets", dweetIDs...).Err()
-			if err != nil {
-				return err
+			if len(dweetIDs) > 0 {
+				err = cacheDB.LPush(common.BaseCtx, keyStem+"dweets", dweetIDs...).Err()
+				if err != nil {
+					return err
+				}
 			}
 
 			if feedObjectsOffset > 0 {
@@ -446,9 +460,11 @@ func CacheUser(detailLevel string, id string, obj *db.UserModel, objectsToFetch 
 				}
 			}
 
-			err = cacheDB.LPush(common.BaseCtx, keyStem+"redweets", redweetIDs...).Err()
-			if err != nil {
-				return err
+			if len(redweetIDs) > 0 {
+				err = cacheDB.LPush(common.BaseCtx, keyStem+"redweets", redweetIDs...).Err()
+				if err != nil {
+					return err
+				}
 			}
 
 			if feedObjectsOffset > 0 {
@@ -494,9 +510,11 @@ func CacheUser(detailLevel string, id string, obj *db.UserModel, objectsToFetch 
 				}
 			}
 
-			err = cacheDB.LPush(common.BaseCtx, keyStem+"redweetedDweets", dweetIDs...).Err()
-			if err != nil {
-				return err
+			if len(dweetIDs) > 0 {
+				err = cacheDB.LPush(common.BaseCtx, keyStem+"redweetedDweets", dweetIDs...).Err()
+				if err != nil {
+					return err
+				}
 			}
 
 			if feedObjectsOffset > 0 {
@@ -542,9 +560,11 @@ func CacheUser(detailLevel string, id string, obj *db.UserModel, objectsToFetch 
 				}
 			}
 
-			err = cacheDB.LPush(common.BaseCtx, keyStem+"likedDweets", dweetIDs...).Err()
-			if err != nil {
-				return err
+			if len(dweetIDs) > 0 {
+				err = cacheDB.LPush(common.BaseCtx, keyStem+"likedDweets", dweetIDs...).Err()
+				if err != nil {
+					return err
+				}
 			}
 
 			if feedObjectsOffset > 0 {
@@ -592,24 +612,33 @@ func CacheDweet(detailLevel string, id string, obj *db.DweetModel, repliesToFetc
 		isReply = "true"
 	}
 	dweetMap := map[string]interface{}{
-		keyStem + "dweetBody":       obj.DweetBody,
-		keyStem + "id":              obj.ID,
-		keyStem + "author":          obj.AuthorID,
-		keyStem + "authorID":        obj.AuthorID,
-		keyStem + "postedAt":        obj.PostedAt.UTC().Format(util.TimeUTCFormat),
-		keyStem + "lastUpdatedAt":   obj.LastUpdatedAt.UTC().Format(util.TimeUTCFormat),
-		keyStem + "likeCount":       strconv.Itoa(obj.LikeCount),
-		keyStem + "isReply":         isReply,
-		keyStem + "originalReplyID": obj.OriginalReplyID,
-		keyStem + "replyCount":      strconv.Itoa(obj.ReplyCount),
-		keyStem + "redweetCount":    strconv.Itoa(obj.RedweetCount),
+		keyStem + "dweetBody":     obj.DweetBody,
+		keyStem + "id":            obj.ID,
+		keyStem + "author":        obj.AuthorID,
+		keyStem + "authorID":      obj.AuthorID,
+		keyStem + "postedAt":      obj.PostedAt.UTC().Format(util.TimeUTCFormat),
+		keyStem + "lastUpdatedAt": obj.LastUpdatedAt.UTC().Format(util.TimeUTCFormat),
+		keyStem + "likeCount":     strconv.Itoa(obj.LikeCount),
+		keyStem + "isReply":       isReply,
+		keyStem + "replyCount":    strconv.Itoa(obj.ReplyCount),
+		keyStem + "redweetCount":  strconv.Itoa(obj.RedweetCount),
+	}
+
+	if isReply == "true" {
+		if originalReplyID, ok := obj.OriginalReplyID(); ok {
+			dweetMap[keyStem+"originalReplyID"] = originalReplyID
+		} else {
+			return fmt.Errorf("internal server error")
+		}
 	}
 
 	interfaceList := make([]interface{}, len(obj.Media))
 	for i, mediaLink := range obj.Media {
 		interfaceList[i] = mediaLink
 	}
-	cacheDB.LPush(common.BaseCtx, keyStem+"media", interfaceList...)
+	if len(interfaceList) > 0 {
+		cacheDB.LPush(common.BaseCtx, keyStem+"media", interfaceList...)
+	}
 
 	err := cacheDB.MSet(common.BaseCtx, dweetMap).Err()
 	if err != nil {
@@ -621,10 +650,16 @@ func CacheDweet(detailLevel string, id string, obj *db.DweetModel, repliesToFetc
 		return err
 	}
 
-	expireTime := time.Now().UTC().Add(time.Hour * 1)
+	expireTime := time.Now().UTC().Add(cacheObjTTL)
 	for key := range dweetMap {
 		err = cacheDB.PExpireAt(common.BaseCtx, key, expireTime).Err()
 		if err != nil {
+			return err
+		}
+	}
+	err = cacheDB.PExpireAt(common.BaseCtx, keyStem+"media", expireTime).Err()
+	if err != nil {
+		if err != redis.Nil {
 			return err
 		}
 	}
@@ -653,24 +688,28 @@ func CacheDweet(detailLevel string, id string, obj *db.DweetModel, repliesToFetc
 			}
 		}
 
-		err = cacheDB.LPush(common.BaseCtx, keyStem+"likeUsers", likeUserIDs...).Err()
-		if err != nil {
-			return err
+		if len(likeUserIDs) > 0 {
+			err = cacheDB.LPush(common.BaseCtx, keyStem+"likeUsers", likeUserIDs...).Err()
+			if err != nil {
+				return err
+			}
+
+			err = cacheDB.PExpireAt(common.BaseCtx, keyStem+"likeUsers", expireTime).Err()
+			if err != nil {
+				return err
+			}
 		}
 
-		err = cacheDB.PExpireAt(common.BaseCtx, keyStem+"likeUsers", expireTime).Err()
-		if err != nil {
-			return err
-		}
+		if len(redweetUserIDs) > 0 {
+			err = cacheDB.LPush(common.BaseCtx, keyStem+"redweetUsers", redweetUserIDs...).Err()
+			if err != nil {
+				return err
+			}
 
-		err = cacheDB.LPush(common.BaseCtx, keyStem+"redweetUsers", redweetUserIDs...).Err()
-		if err != nil {
-			return err
-		}
-
-		err = cacheDB.PExpireAt(common.BaseCtx, keyStem+"redweetUsers", expireTime).Err()
-		if err != nil {
-			return err
+			err = cacheDB.PExpireAt(common.BaseCtx, keyStem+"redweetUsers", expireTime).Err()
+			if err != nil {
+				return err
+			}
 		}
 
 		if obj.IsReply {
@@ -710,9 +749,11 @@ func CacheDweet(detailLevel string, id string, obj *db.DweetModel, repliesToFetc
 			}
 		}
 
-		err = cacheDB.LPush(common.BaseCtx, keyStem+"replyDweets", replyDweetIDs...).Err()
-		if err != nil {
-			return err
+		if len(replyDweetIDs) > 0 {
+			err = cacheDB.LPush(common.BaseCtx, keyStem+"replyDweets", replyDweetIDs...).Err()
+			if err != nil {
+				return err
+			}
 		}
 
 		if replyOffset > 0 {
@@ -744,7 +785,7 @@ func CacheRedweet(detailLevel string, id string, obj *db.RedweetModel) error {
 			return err
 		}
 
-		expireTime := time.Now().UTC().Add(time.Hour * 1)
+		expireTime := time.Now().UTC().Add(cacheObjTTL)
 		for key := range dweetMap {
 			err = cacheDB.PExpireAt(common.BaseCtx, key, expireTime).Err()
 			if err != nil {

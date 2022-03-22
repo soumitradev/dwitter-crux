@@ -3,8 +3,10 @@ package middleware
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/soumitradev/Dwitter/backend/common"
 
@@ -12,7 +14,7 @@ import (
 )
 
 // Limit size of request
-func SizeHandler(next http.Handler) http.Handler {
+func SizeAndTimeHandler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.ContentLength > (65 << 20) {
 			msg := "Request too large."
@@ -23,7 +25,9 @@ func SizeHandler(next http.Handler) http.Handler {
 			})
 			return
 		}
+		startTime := time.Now()
 		next.ServeHTTP(w, r)
+		fmt.Printf("Request duration: %s\n", time.Since(startTime).String())
 	})
 }
 

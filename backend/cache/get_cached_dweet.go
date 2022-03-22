@@ -102,7 +102,7 @@ func GetCachedDweetFull(id string, repliesToFetch int, replyOffset int) (schema.
 	if err != nil {
 		return schema.DweetType{}, err
 	}
-	expireTime := time.Now().UTC().Add(time.Hour)
+	expireTime := time.Now().UTC().Add(cacheObjTTL)
 	var replyList []schema.BasicDweetType
 	objCount := 0
 	if repliesToFetch < 0 {

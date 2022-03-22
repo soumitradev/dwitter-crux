@@ -336,9 +336,18 @@ func GetUser(username string, objectsToFetch string, feedObjectsToFetch int, fee
 	if err != nil {
 		if err == redis.Nil {
 			isCached = false
+		} else {
+			return schema.UserType{}, fmt.Errorf("internal server error: %v", err)
 		}
-		return schema.UserType{}, fmt.Errorf("internal server error: %v", err)
 	}
+
+	if isCached {
+		fmt.Println("Grabbing from cache")
+	} else {
+		fmt.Println("Cache miss")
+	}
+
+	// isCached = false
 
 	if !isCached {
 		if feedObjectsToFetch < 0 {
@@ -671,6 +680,11 @@ func GetUser(username string, objectsToFetch string, feedObjectsToFetch int, fee
 
 			alsoFollowedBy = util.HashIntersectUsers(followers, usersFollowed)
 			alsoFollowing = util.HashIntersectUsers(following, usersFollowed)
+		}
+
+		err := cache.CacheUser("full", username, user, objectsToFetch, feedObjectsToFetch, feedObjectsOffset)
+		if err != nil {
+			return schema.UserType{}, err
 		}
 
 		// Send back the user requested, along with mutuals in the followers field

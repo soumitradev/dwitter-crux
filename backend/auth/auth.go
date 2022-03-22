@@ -21,6 +21,7 @@ import (
 )
 
 var authDB *redis.Client
+var sessionTTL = time.Hour * 24
 
 // A SessionType stores info for a session
 type SessionType struct {
@@ -80,7 +81,7 @@ func generateSession(username string, password string) (SessionType, error) {
 		session := SessionType{
 			Username: username,
 			Sid:      sid,
-			Expires:  time.Now().UTC().Add(time.Hour * 24),
+			Expires:  time.Now().UTC().Add(sessionTTL),
 		}
 
 		// Convert struct into a hashmap

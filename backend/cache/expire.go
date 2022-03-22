@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/soumitradev/Dwitter/backend/common"
 )
 
@@ -21,13 +22,17 @@ func ExpireRedweetAt(id string, expireTime time.Time) error {
 	for _, hash := range redweetProps {
 		err := cacheDB.PExpireAt(common.BaseCtx, hash, expireTime).Err()
 		if err != nil {
-			return err
+			if err != redis.Nil {
+				return err
+			}
 		}
 	}
 
 	authorID, err := cacheDB.Get(common.BaseCtx, keyStem+"author").Result()
 	if err != nil {
-		return err
+		if err != redis.Nil {
+			return err
+		}
 	}
 	err = ExpireUserAt("basic", authorID, expireTime)
 	if err != nil {
@@ -36,7 +41,9 @@ func ExpireRedweetAt(id string, expireTime time.Time) error {
 
 	originalRedweetID, err := cacheDB.Get(common.BaseCtx, keyStem+"originalRedweetID").Result()
 	if err != nil {
-		return err
+		if err != redis.Nil {
+			return err
+		}
 	}
 	if originalRedweetID != "" {
 		err = ExpireDweetAt("basic", originalRedweetID, expireTime)
@@ -68,13 +75,17 @@ func ExpireDweetAt(detailLevel string, id string, expireTime time.Time) error {
 	for _, hash := range dweetProps {
 		err := cacheDB.PExpireAt(common.BaseCtx, hash, expireTime).Err()
 		if err != nil {
-			return err
+			if err != redis.Nil {
+				return err
+			}
 		}
 	}
 
 	authorID, err := cacheDB.Get(common.BaseCtx, keyStem+"author").Result()
 	if err != nil {
-		return err
+		if err != redis.Nil {
+			return err
+		}
 	}
 	err = ExpireUserAt("basic", authorID, expireTime)
 	if err != nil {
@@ -89,12 +100,18 @@ func ExpireDweetAt(detailLevel string, id string, expireTime time.Time) error {
 		for _, userList := range userListsToExpire {
 			err := cacheDB.PExpireAt(common.BaseCtx, keyStem+userList, expireTime).Err()
 			if err != nil {
-				return err
+				if err != redis.Nil {
+					return err
+				}
 			}
 
 			userList, err := cacheDB.LRange(common.BaseCtx, keyStem+userList, 0, -1).Result()
 			if err != nil {
-				return err
+				if err != redis.Nil {
+					return err
+				} else {
+					userList = []string{}
+				}
 			}
 
 			for _, v := range userList {
@@ -107,12 +124,18 @@ func ExpireDweetAt(detailLevel string, id string, expireTime time.Time) error {
 		for _, objectList := range feedObjectListsToExpire {
 			err := cacheDB.PExpireAt(common.BaseCtx, keyStem+objectList, expireTime).Err()
 			if err != nil {
-				return err
+				if err != redis.Nil {
+					return err
+				}
 			}
 
 			objList, err := cacheDB.LRange(common.BaseCtx, keyStem+objectList, 0, -1).Result()
 			if err != nil {
-				return err
+				if err != redis.Nil {
+					return err
+				} else {
+					objList = []string{}
+				}
 			}
 
 			for _, v := range objList {
@@ -131,7 +154,9 @@ func ExpireDweetAt(detailLevel string, id string, expireTime time.Time) error {
 
 		originalReplyID, err := cacheDB.Get(common.BaseCtx, keyStem+"originalReplyID").Result()
 		if err != nil {
-			return err
+			if err != redis.Nil {
+				return err
+			}
 		}
 		if originalReplyID != "" {
 			err = ExpireDweetAt("basic", originalReplyID, expireTime)
@@ -162,7 +187,9 @@ func ExpireUserAt(detailLevel string, id string, expireTime time.Time) error {
 	for _, hash := range userProps {
 		err := cacheDB.PExpireAt(common.BaseCtx, hash, expireTime).Err()
 		if err != nil {
-			return err
+			if err != redis.Nil {
+				return err
+			}
 		}
 	}
 
@@ -174,12 +201,18 @@ func ExpireUserAt(detailLevel string, id string, expireTime time.Time) error {
 		for _, userList := range userListsToExpire {
 			err := cacheDB.PExpireAt(common.BaseCtx, keyStem+userList, expireTime).Err()
 			if err != nil {
-				return err
+				if err != redis.Nil {
+					return err
+				}
 			}
 
 			userList, err := cacheDB.LRange(common.BaseCtx, keyStem+userList, 0, -1).Result()
 			if err != nil {
-				return err
+				if err != redis.Nil {
+					return err
+				} else {
+					userList = []string{}
+				}
 			}
 
 			for _, v := range userList {
@@ -192,12 +225,18 @@ func ExpireUserAt(detailLevel string, id string, expireTime time.Time) error {
 		for _, objectList := range feedObjectListsToExpire {
 			err := cacheDB.PExpireAt(common.BaseCtx, keyStem+objectList, expireTime).Err()
 			if err != nil {
-				return err
+				if err != redis.Nil {
+					return err
+				}
 			}
 
 			objList, err := cacheDB.LRange(common.BaseCtx, keyStem+objectList, 0, -1).Result()
 			if err != nil {
-				return err
+				if err != redis.Nil {
+					return err
+				} else {
+					objList = []string{}
+				}
 			}
 
 			for _, v := range objList {

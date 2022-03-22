@@ -113,10 +113,19 @@ func GetCachedUserFull(id string, objectsToFetch string, feedObjectsToFetch int,
 	if err != nil {
 		return schema.UserType{}, err
 	}
-	followerCount, err := strconv.Atoi(valList[5].(string))
-	if err != nil {
-		return schema.UserType{}, err
+
+	followerCount := 0
+	if valList[5] == nil {
+		return schema.UserType{}, redis.Nil
+	} else if followerCountString, ok := valList[5].(string); ok {
+		followerCount, err = strconv.Atoi(followerCountString)
+		if err != nil {
+			return schema.UserType{}, fmt.Errorf("internal server error: %v", err)
+		}
+	} else {
+		return schema.UserType{}, fmt.Errorf("internal server error: %v", err)
 	}
+
 	followingCount, err := strconv.Atoi(valList[6].(string))
 	if err != nil {
 		return schema.UserType{}, err
@@ -147,7 +156,7 @@ func GetCachedUserFull(id string, objectsToFetch string, feedObjectsToFetch int,
 		if err != nil {
 			return schema.UserType{}, err
 		}
-		expireTime := time.Now().UTC().Add(time.Hour)
+		expireTime := time.Now().UTC().Add(cacheObjTTL)
 		var feedObjectList []interface{}
 		objCount := 0
 		if feedObjectsToFetch < 0 {
@@ -287,7 +296,7 @@ func GetCachedUserFull(id string, objectsToFetch string, feedObjectsToFetch int,
 		if err != nil {
 			return schema.UserType{}, err
 		}
-		expireTime := time.Now().UTC().Add(time.Hour)
+		expireTime := time.Now().UTC().Add(cacheObjTTL)
 		var feedObjectList []schema.BasicDweetType
 		objCount := 0
 		if feedObjectsToFetch < 0 {
@@ -404,7 +413,7 @@ func GetCachedUserFull(id string, objectsToFetch string, feedObjectsToFetch int,
 		if err != nil {
 			return schema.UserType{}, err
 		}
-		expireTime := time.Now().UTC().Add(time.Hour)
+		expireTime := time.Now().UTC().Add(cacheObjTTL)
 		var feedObjectList []schema.RedweetType
 		objCount := 0
 		if feedObjectsToFetch < 0 {
@@ -521,7 +530,7 @@ func GetCachedUserFull(id string, objectsToFetch string, feedObjectsToFetch int,
 		if err != nil {
 			return schema.UserType{}, err
 		}
-		expireTime := time.Now().UTC().Add(time.Hour)
+		expireTime := time.Now().UTC().Add(cacheObjTTL)
 		var feedObjectList []schema.BasicDweetType
 		objCount := 0
 		if feedObjectsToFetch < 0 {
@@ -638,7 +647,7 @@ func GetCachedUserFull(id string, objectsToFetch string, feedObjectsToFetch int,
 		if err != nil {
 			return schema.UserType{}, err
 		}
-		expireTime := time.Now().UTC().Add(time.Hour)
+		expireTime := time.Now().UTC().Add(cacheObjTTL)
 		var feedObjectList []schema.BasicDweetType
 		objCount := 0
 		if feedObjectsToFetch < 0 {

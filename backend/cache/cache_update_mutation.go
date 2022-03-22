@@ -2,6 +2,7 @@
 package cache
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -130,6 +131,8 @@ func CreateDweetCacheUpdate(dweet db.DweetModel) error {
 		return err
 	}
 
+	fmt.Println("test")
+
 	err = CacheDweet("basic", dweet.ID, &dweet, 0, 0)
 	if err != nil {
 		return err
@@ -143,7 +146,7 @@ func CreateDweetCacheUpdate(dweet db.DweetModel) error {
 		return err
 	}
 
-	expireTime := time.Now().UTC().Add(time.Hour)
+	expireTime := time.Now().UTC().Add(cacheObjTTL)
 	err = ExpireUserAt("full", dweet.AuthorID, expireTime)
 	if err != nil {
 		return err
@@ -182,7 +185,7 @@ func CreateReplyCacheUpdate(dweet db.DweetModel) error {
 
 	}
 
-	expireTime := time.Now().UTC().Add(time.Hour)
+	expireTime := time.Now().UTC().Add(cacheObjTTL)
 
 	if userCached {
 		keyStem := GenerateKey("user", "full", dweet.AuthorID, "")
@@ -270,7 +273,7 @@ func RedweetCacheUpdate(redweet db.RedweetModel) error {
 		return err
 	}
 
-	expireTime := time.Now().UTC().Add(time.Hour)
+	expireTime := time.Now().UTC().Add(cacheObjTTL)
 	redweetID := ConstructRedweetID(redweet.AuthorID, redweet.OriginalRedweetID)
 
 	if userCached {
@@ -386,7 +389,7 @@ func LikeCacheUpdate(dweet db.DweetModel, userThatLiked db.UserModel, repliesToF
 		return err
 	}
 
-	expireTime := time.Now().UTC().Add(time.Hour)
+	expireTime := time.Now().UTC().Add(cacheObjTTL)
 
 	if userInFull {
 		keyStem := GenerateKey("user", "full", userThatLiked.Username, "")
@@ -506,7 +509,7 @@ func FollowCacheUpdate(userThatWasFollowed db.UserModel, userThatFollowed db.Use
 		return err
 	}
 
-	expireTime := time.Now().UTC().Add(time.Hour)
+	expireTime := time.Now().UTC().Add(cacheObjTTL)
 
 	if userFollowingInFull {
 		keyStem := GenerateKey("user", "full", userThatFollowed.Username, "")
@@ -631,7 +634,7 @@ func UnlikeCacheUpdate(dweet db.DweetModel, userThatLiked db.UserModel, repliesT
 		return err
 	}
 
-	expireTime := time.Now().UTC().Add(time.Hour)
+	expireTime := time.Now().UTC().Add(cacheObjTTL)
 
 	if userInFull {
 		keyStem := GenerateKey("user", "full", userThatLiked.Username, "")
@@ -728,7 +731,7 @@ func UnredweetCacheUpdate(redweet db.RedweetModel, userThatUnredweeted db.UserMo
 		return err
 	}
 
-	expireTime := time.Now().UTC().Add(time.Hour)
+	expireTime := time.Now().UTC().Add(cacheObjTTL)
 	redweetID := ConstructRedweetID(redweet.AuthorID, redweet.OriginalRedweetID)
 
 	if userInFull {
@@ -852,7 +855,7 @@ func UnfollowCacheUpdate(userThatWasFollowed db.UserModel, userThatFollowed db.U
 		return err
 	}
 
-	expireTime := time.Now().UTC().Add(time.Hour)
+	expireTime := time.Now().UTC().Add(cacheObjTTL)
 
 	if userFollowingInFull {
 		keyStem := GenerateKey("user", "full", userThatFollowed.Username, "")
@@ -939,7 +942,7 @@ func EditDweetCacheUpdate(dweet db.DweetModel, repliesToFetch int, repliesOffset
 		return err
 	}
 
-	expireTime := time.Now().UTC().Add(time.Hour)
+	expireTime := time.Now().UTC().Add(cacheObjTTL)
 	err = ExpireDweetAt("full", dweet.ID, expireTime)
 	if err != nil {
 		return err
@@ -970,7 +973,7 @@ func EditUserCacheUpdate(user db.UserModel, objectsToFetch string, feedObjectsTo
 		return err
 	}
 
-	expireTime := time.Now().UTC().Add(time.Hour)
+	expireTime := time.Now().UTC().Add(cacheObjTTL)
 	err = ExpireUserAt("full", user.Username, expireTime)
 	if err != nil {
 		return err
@@ -1021,7 +1024,7 @@ func unlikeCacheUpdateInternal(dweetID string, usernameThatLiked string) error {
 		return err
 	}
 
-	expireTime := time.Now().UTC().Add(time.Hour)
+	expireTime := time.Now().UTC().Add(cacheObjTTL)
 
 	if userInFull {
 		keyStem := GenerateKey("user", "full", usernameThatLiked, "")
@@ -1115,7 +1118,7 @@ func unredweetCacheUpdateInternal(redweetID string, usernameThatUnredweeted stri
 		return err
 	}
 
-	expireTime := time.Now().UTC().Add(time.Hour)
+	expireTime := time.Now().UTC().Add(cacheObjTTL)
 
 	if userInFull {
 		keyStem := GenerateKey("user", "full", usernameThatUnredweeted, "")
@@ -1189,7 +1192,7 @@ func unredweetCacheUpdateInternal(redweetID string, usernameThatUnredweeted stri
 // If the user that posted the dweet is cached in full detail, their feedObjects and dweets fields are UPDATEd
 // If the dweet is a reply to a dweet then the dweet replied to is UPDATEd
 func DeleteDweetCacheUpdate(dweetID string) error {
-	expireTime := time.Now().UTC().Add(time.Hour)
+	expireTime := time.Now().UTC().Add(cacheObjTTL)
 
 	keyStem := GenerateKey("dweet", "full", dweetID, "")
 	replyIDs, err := cacheDB.LRange(common.BaseCtx, keyStem+"replyDweets", 0, -1).Result()

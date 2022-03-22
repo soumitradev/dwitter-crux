@@ -105,10 +105,10 @@ func main() {
 	})
 
 	router.Use(handlers.CompressHandler)
-	router.Use(middleware.LoggingHandler)
+	// router.Use(middleware.LoggingHandler)
 	router.Use(middleware.ContentTypeHandler)
 	router.Use(middleware.RecoveryHandler)
-	router.Use(middleware.SizeHandler)
+	router.Use(middleware.SizeAndTimeHandler)
 	router.Use(secureMiddleware.Handler)
 	// CORS Handler. TODO: Make sure to turn on/off in production!
 	router.Use(middleware.CORSTestingHandler)
