@@ -34,17 +34,40 @@ func GetCachedDweetFull(id string, repliesToFetch int, replyOffset int) (schema.
 		return schema.DweetType{}, err
 	}
 
-	likeCount, err := strconv.Atoi(valList[6].(string))
-	if err != nil {
-		return schema.DweetType{}, err
+	likeCount := 0
+	if valList[6] == nil {
+		return schema.DweetType{}, redis.Nil
+	} else if likeCountString, ok := valList[6].(string); ok {
+		likeCount, err = strconv.Atoi(likeCountString)
+		if err != nil {
+			return schema.DweetType{}, fmt.Errorf("internal server error: %v", err)
+		}
+	} else {
+		return schema.DweetType{}, fmt.Errorf("internal server error: %v", err)
 	}
-	replyCount, err := strconv.Atoi(valList[9].(string))
-	if err != nil {
-		return schema.DweetType{}, err
+
+	replyCount := 0
+	if valList[9] == nil {
+		return schema.DweetType{}, redis.Nil
+	} else if replyCountString, ok := valList[9].(string); ok {
+		replyCount, err = strconv.Atoi(replyCountString)
+		if err != nil {
+			return schema.DweetType{}, fmt.Errorf("internal server error: %v", err)
+		}
+	} else {
+		return schema.DweetType{}, fmt.Errorf("internal server error: %v", err)
 	}
-	redweetCount, err := strconv.Atoi(valList[10].(string))
-	if err != nil {
-		return schema.DweetType{}, err
+
+	redweetCount := 0
+	if valList[10] == nil {
+		return schema.DweetType{}, redis.Nil
+	} else if redweetCountString, ok := valList[10].(string); ok {
+		redweetCount, err = strconv.Atoi(redweetCountString)
+		if err != nil {
+			return schema.DweetType{}, fmt.Errorf("internal server error: %v", err)
+		}
+	} else {
+		return schema.DweetType{}, fmt.Errorf("internal server error: %v", err)
 	}
 
 	isReply := false
@@ -272,6 +295,113 @@ func GetCachedDweetFull(id string, repliesToFetch int, replyOffset int) (schema.
 }
 
 func GetCachedDweetBasic(id string) (schema.BasicDweetType, error) {
+	isCachedInFull, err := CheckIfCached("dweet", "full", id)
+	if err != nil {
+		return schema.BasicDweetType{}, err
+	}
+
+	// If full user is not found, check for basic user
+
+	if !isCachedInFull {
+		keyStem := GenerateKey("dweet", "basic", id, "")
+		keyList := []string{
+			keyStem + "dweetBody",
+			keyStem + "id",
+			keyStem + "author",
+			keyStem + "authorID",
+			keyStem + "postedAt",
+			keyStem + "lastUpdatedAt",
+			keyStem + "likeCount",
+			keyStem + "isReply",
+			keyStem + "originalReplyID",
+			keyStem + "replyCount",
+			keyStem + "redweetCount",
+		}
+		valList, err := cacheDB.MGet(common.BaseCtx, keyList...).Result()
+		if err != nil {
+			return schema.BasicDweetType{}, err
+		}
+
+		likeCount := 0
+		if valList[6] == nil {
+			return schema.BasicDweetType{}, redis.Nil
+		} else if likeCountString, ok := valList[6].(string); ok {
+			likeCount, err = strconv.Atoi(likeCountString)
+			if err != nil {
+				return schema.BasicDweetType{}, fmt.Errorf("internal server error: %v", err)
+			}
+		} else {
+			return schema.BasicDweetType{}, fmt.Errorf("internal server error: %v", err)
+		}
+
+		replyCount := 0
+		if valList[9] == nil {
+			return schema.BasicDweetType{}, redis.Nil
+		} else if replyCountString, ok := valList[9].(string); ok {
+			replyCount, err = strconv.Atoi(replyCountString)
+			if err != nil {
+				return schema.BasicDweetType{}, fmt.Errorf("internal server error: %v", err)
+			}
+		} else {
+			return schema.BasicDweetType{}, fmt.Errorf("internal server error: %v", err)
+		}
+
+		redweetCount := 0
+		if valList[10] == nil {
+			return schema.BasicDweetType{}, redis.Nil
+		} else if redweetCountString, ok := valList[10].(string); ok {
+			redweetCount, err = strconv.Atoi(redweetCountString)
+			if err != nil {
+				return schema.BasicDweetType{}, fmt.Errorf("internal server error: %v", err)
+			}
+		} else {
+			return schema.BasicDweetType{}, fmt.Errorf("internal server error: %v", err)
+		}
+
+		isReply := false
+		if valList[7].(string) == "true" {
+			isReply = true
+		}
+
+		author, err := GetCachedUserBasic(valList[3].(string))
+		if err != nil {
+			return schema.BasicDweetType{}, err
+		}
+
+		mediaLinks, err := cacheDB.LRange(common.BaseCtx, keyStem+"media", 0, -1).Result()
+		if err != nil {
+			if err == redis.Nil {
+				mediaLinks = []string{}
+			} else {
+				return schema.BasicDweetType{}, err
+			}
+		}
+
+		postedAt, err := time.Parse(util.TimeUTCFormat, valList[4].(string))
+		if err != nil {
+			return schema.BasicDweetType{}, err
+		}
+		lastUpdatedAt, err := time.Parse(util.TimeUTCFormat, valList[5].(string))
+		if err != nil {
+			return schema.BasicDweetType{}, err
+		}
+		cachedDweet := schema.BasicDweetType{
+			DweetBody:       valList[0].(string),
+			ID:              valList[1].(string),
+			Author:          author,
+			AuthorID:        valList[3].(string),
+			PostedAt:        postedAt,
+			LastUpdatedAt:   lastUpdatedAt,
+			LikeCount:       likeCount,
+			IsReply:         isReply,
+			OriginalReplyID: valList[8].(string),
+			ReplyCount:      replyCount,
+			RedweetCount:    redweetCount,
+			Media:           mediaLinks,
+		}
+		return cachedDweet, nil
+	}
+
 	keyStem := GenerateKey("dweet", "full", id, "")
 	keyList := []string{
 		keyStem + "dweetBody",
@@ -288,97 +418,43 @@ func GetCachedDweetBasic(id string) (schema.BasicDweetType, error) {
 	}
 	valList, err := cacheDB.MGet(common.BaseCtx, keyList...).Result()
 	if err != nil {
-		// If full user is not found, check for basic user
-		if err == redis.Nil {
-			keyStem := GenerateKey("dweet", "basic", id, "")
-			keyList := []string{
-				keyStem + "dweetBody",
-				keyStem + "id",
-				keyStem + "author",
-				keyStem + "authorID",
-				keyStem + "postedAt",
-				keyStem + "lastUpdatedAt",
-				keyStem + "likeCount",
-				keyStem + "isReply",
-				keyStem + "originalReplyID",
-				keyStem + "replyCount",
-				keyStem + "redweetCount",
-			}
-			valList, err := cacheDB.MGet(common.BaseCtx, keyList...).Result()
-			if err != nil {
-				return schema.BasicDweetType{}, err
-			}
+		return schema.BasicDweetType{}, err
+	}
 
-			likeCount, err := strconv.Atoi(valList[6].(string))
-			if err != nil {
-				return schema.BasicDweetType{}, err
-			}
-			replyCount, err := strconv.Atoi(valList[9].(string))
-			if err != nil {
-				return schema.BasicDweetType{}, err
-			}
-			redweetCount, err := strconv.Atoi(valList[10].(string))
-			if err != nil {
-				return schema.BasicDweetType{}, err
-			}
-
-			isReply := false
-			if valList[7].(string) == "true" {
-				isReply = true
-			}
-
-			author, err := GetCachedUserBasic(valList[3].(string))
-			if err != nil {
-				return schema.BasicDweetType{}, err
-			}
-
-			mediaLinks, err := cacheDB.LRange(common.BaseCtx, keyStem+"media", 0, -1).Result()
-			if err != nil {
-				if err == redis.Nil {
-					mediaLinks = []string{}
-				} else {
-					return schema.BasicDweetType{}, err
-				}
-			}
-
-			postedAt, err := time.Parse(util.TimeUTCFormat, valList[4].(string))
-			if err != nil {
-				return schema.BasicDweetType{}, err
-			}
-			lastUpdatedAt, err := time.Parse(util.TimeUTCFormat, valList[5].(string))
-			if err != nil {
-				return schema.BasicDweetType{}, err
-			}
-			cachedDweet := schema.BasicDweetType{
-				DweetBody:       valList[0].(string),
-				ID:              valList[1].(string),
-				Author:          author,
-				AuthorID:        valList[3].(string),
-				PostedAt:        postedAt,
-				LastUpdatedAt:   lastUpdatedAt,
-				LikeCount:       likeCount,
-				IsReply:         isReply,
-				OriginalReplyID: valList[8].(string),
-				ReplyCount:      replyCount,
-				RedweetCount:    redweetCount,
-				Media:           mediaLinks,
-			}
-			return cachedDweet, nil
+	likeCount := 0
+	if valList[6] == nil {
+		return schema.BasicDweetType{}, redis.Nil
+	} else if likeCountString, ok := valList[6].(string); ok {
+		likeCount, err = strconv.Atoi(likeCountString)
+		if err != nil {
+			return schema.BasicDweetType{}, fmt.Errorf("internal server error: %v", err)
 		}
-		return schema.BasicDweetType{}, err
+	} else {
+		return schema.BasicDweetType{}, fmt.Errorf("internal server error: %v", err)
 	}
 
-	likeCount, err := strconv.Atoi(valList[6].(string))
-	if err != nil {
-		return schema.BasicDweetType{}, err
+	replyCount := 0
+	if valList[9] == nil {
+		return schema.BasicDweetType{}, redis.Nil
+	} else if replyCountString, ok := valList[9].(string); ok {
+		replyCount, err = strconv.Atoi(replyCountString)
+		if err != nil {
+			return schema.BasicDweetType{}, fmt.Errorf("internal server error: %v", err)
+		}
+	} else {
+		return schema.BasicDweetType{}, fmt.Errorf("internal server error: %v", err)
 	}
-	replyCount, err := strconv.Atoi(valList[9].(string))
-	if err != nil {
-		return schema.BasicDweetType{}, err
-	}
-	redweetCount, err := strconv.Atoi(valList[10].(string))
-	if err != nil {
-		return schema.BasicDweetType{}, err
+
+	redweetCount := 0
+	if valList[10] == nil {
+		return schema.BasicDweetType{}, redis.Nil
+	} else if redweetCountString, ok := valList[10].(string); ok {
+		redweetCount, err = strconv.Atoi(redweetCountString)
+		if err != nil {
+			return schema.BasicDweetType{}, fmt.Errorf("internal server error: %v", err)
+		}
+	} else {
+		return schema.BasicDweetType{}, fmt.Errorf("internal server error: %v", err)
 	}
 
 	isReply := false

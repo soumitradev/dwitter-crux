@@ -226,7 +226,6 @@ Whew that was a lot of work
 */
 
 // TODO:
-// - Better conversion checking for getting redweets and dweets (see the first part of the get_cached_user.go GetCachedUserFull function)
 // - Check for any leaks
 // - Finish cache integration of list-objects
 
